@@ -36,9 +36,8 @@ logger = logging.get_logger(__name__)
 
 # Online downloading will be added later
 
-model_path = './EmoLLM_V3.0'
-os.system(f'git clone https://code.openxlab.org.cn/chg0901/EmoLLM_V3.0.git {model_path}')
-os.system(f'cd {model_path} && git lfs pull')
+# Local Model Path
+model_path = "/content/drive/MyDrive/EmoLLM/model"
 
 @dataclass
 class GenerationConfig:
