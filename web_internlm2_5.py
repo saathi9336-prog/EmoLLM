@@ -36,9 +36,7 @@ logger = logging.get_logger(__name__)
 
 # Online downloading will be added later
 
-model_path = './EmoLLM_V3.0'
-os.system(f'git clone https://code.openxlab.org.cn/chg0901/EmoLLM_V3.0.git {model_path}')
-os.system(f'cd {model_path} && git lfs pull')
+model_path = '/kaggle/working/EmoLLMV3.0/model'
 
 @dataclass
 class GenerationConfig:
@@ -189,10 +187,29 @@ def on_btn_click():
 
 @st.cache_resource
 def load_model():
-    model = (AutoModelForCausalLM.from_pretrained(model_path, trust_remote_code=True).to(torch.bfloat16).cuda())
-    tokenizer = AutoTokenizer.from_pretrained(model_path,trust_remote_code=True)
-    return model, tokenizer
 
+    from transformers import BitsAndBytesConfig
+
+    bnb_config = BitsAndBytesConfig(
+        load_in_8bit=True
+    )
+
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_path,
+        trust_remote_code=True
+    )
+
+    model = AutoModelForCausalLM.from_pretrained(
+        model_path,
+        trust_remote_code=True,
+        quantization_config=bnb_config,
+        device_map="auto",
+        torch_dtype=torch.float16
+    )
+
+    model.eval()
+
+    return model, tokenizer
 
 def prepare_generation_config():
     with st.sidebar:
