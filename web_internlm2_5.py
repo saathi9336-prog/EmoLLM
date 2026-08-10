@@ -190,13 +190,18 @@ def load_model():
 
     from transformers import BitsAndBytesConfig
 
-    bnb_config = BitsAndBytesConfig(
-        load_in_8bit=True
-    )
+    print("Loading tokenizer...")
 
     tokenizer = AutoTokenizer.from_pretrained(
         model_path,
         trust_remote_code=True
+    )
+
+    print("Tokenizer loaded.")
+    print("Loading EmoLLM V3.0 in 8-bit...")
+
+    bnb_config = BitsAndBytesConfig(
+        load_in_8bit=True
     )
 
     model = AutoModelForCausalLM.from_pretrained(
@@ -208,6 +213,10 @@ def load_model():
     )
 
     model.eval()
+
+    print("================================")
+    print("Model loaded successfully!")
+    print("================================")
 
     return model, tokenizer
 
@@ -233,9 +242,13 @@ def prepare_generation_config():
 
 
 user_prompt = '<|im_start|>user\n{user}<|im_end|>\n'
+
 robot_prompt = '<|im_start|>assistant\n{robot}<|im_end|>\n'
-cur_query_prompt = '<|im_start|>user\n{user}<|im_end|>\n\
-    <|im_start|>assistant\n'
+
+cur_query_prompt = (
+    '<|im_start|>user\n{user}<|im_end|>\n'
+    '<|im_start|>assistant\n'
+)
 
 
 def combine_history(prompt):
