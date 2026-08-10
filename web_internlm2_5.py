@@ -15,6 +15,10 @@ Please run with the command `streamlit run path/to/web_demo.py
 Using `python path/to/web_demo.py` may cause unknown problems.
 """
 # isort: skip_file
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
+ASSETS_DIR = BASE_DIR / "assets"
 import os
 os.environ["USE_TF"] = "0"
 os.environ["TRANSFORMERS_NO_TF"] = "1"
@@ -226,7 +230,13 @@ def load_model():
 def prepare_generation_config():
     with st.sidebar:
          # 使用 Streamlit 的 markdown 函数添加 Markdown 文本
-        st.image('assets/EmoLLM_logo_L.png', width=1, caption='EmoLLM Logo', use_column_width=True)
+        st.image(
+            str(ASSETS_DIR / "EmoLLM_logo_L.png"),
+            width=1,
+            caption="EmoLLM Logo",
+            use_column_width=True
+        )
+        
         st.markdown("[访问 EmoLLM 官方repo](https://github.com/SmartFlowAI/EmoLLM)")
         
         max_length = st.slider('Max Length',
@@ -278,8 +288,8 @@ def main():
     model, tokenizer = load_model()
     print('load model end.')
 
-    user_avator = 'assets/user.png'
-    robot_avator = 'assets/EmoLLM.png'
+    user_avator = str(ASSETS_DIR / "user.png")
+    robot_avator = str(ASSETS_DIR / "EmoLLM.png")
 
     st.title('EmoLLM V3.0 心理咨询室')
 
