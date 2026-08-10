@@ -43,7 +43,15 @@ logger = logging.get_logger(__name__)
 
 # Online downloading will be added later
 
-model_path = '/kaggle/working/EmoLLMV3.0/model'
+import os
+
+BASE_DIR = "/kaggle/working/EmoLLM"
+
+model_path = os.path.join(BASE_DIR, "model")
+
+USER_AVATAR = os.path.join(BASE_DIR, "assets", "user.png")
+ROBOT_AVATAR = os.path.join(BASE_DIR, "assets", "EmoLLM.png")
+LOGO_PATH = os.path.join(BASE_DIR, "assets", "EmoLLM_logo_L.png")
 
 @dataclass
 class GenerationConfig:
@@ -189,7 +197,8 @@ def generate_interactive(
 
 
 def on_btn_click():
-    del st.session_state.messages
+    if "messages" in st.session_state:
+        del st.session_state.messages
 
 
 @st.cache_resource
@@ -228,31 +237,55 @@ def load_model():
     return model, tokenizer
 
 def prepare_generation_config():
+
     with st.sidebar:
-         # 使用 Streamlit 的 markdown 函数添加 Markdown 文本
+
         st.image(
-            str(ASSETS_DIR / "EmoLLM_logo_L.png"),
-            width=1,
+            LOGO_PATH,
             caption="EmoLLM Logo",
             use_column_width=True
         )
-        
-        st.markdown("[访问 EmoLLM 官方repo](https://github.com/SmartFlowAI/EmoLLM)")
-        
-        max_length = st.slider('Max Length',
-                               min_value=8,
-                               max_value=32768,
-                               value=32768)
-        top_p = st.slider('Top P', 0.0, 1.0, 0.8, step=0.01)
-        temperature = st.slider('Temperature', 0.0, 1.0, 0.7, step=0.01)
-        st.button('Clear Chat History', on_click=on_btn_click)
 
-    generation_config = GenerationConfig(max_length=max_length,
-                                         top_p=top_p,
-                                         temperature=temperature)
+        st.markdown(
+            "[Visit the official EmoLLM repository]"
+            "(https://github.com/SmartFlowAI/EmoLLM)"
+        )
+
+        max_length = st.slider(
+            "Maximum Response Length",
+            min_value=8,
+            max_value=32768,
+            value=32768
+        )
+
+        top_p = st.slider(
+            "Top P",
+            0.0,
+            1.0,
+            0.8,
+            step=0.01
+        )
+
+        temperature = st.slider(
+            "Temperature",
+            0.0,
+            1.0,
+            0.7,
+            step=0.01
+        )
+
+        st.button(
+            "Clear Chat History",
+            on_click=on_btn_click
+        )
+
+    generation_config = GenerationConfig(
+        max_length=max_length,
+        top_p=top_p,
+        temperature=temperature
+    )
 
     return generation_config
-
 
 user_prompt = '<|im_start|>user\n{user}<|im_end|>\n'
 
@@ -266,7 +299,20 @@ cur_query_prompt = (
 
 def combine_history(prompt):
     messages = st.session_state.messages
-    meta_instruction = ('你是EmoLLM心理咨询师, 由EmoLLM团队打造, 是一个研究过无数具有心理咨询者与顶级专业心理咨询师对话的心理学教授, 在心理方面拥有广博的知识储备和丰富的研究咨询经验。你旨在通过专业心理咨询, 协助来访者完成心理诊断, 利用专业心理学知识与咨询技术一步步帮助来访者解决心理问题。如果有必要，请用“咨询者”称呼对话咨询的用户。')
+    meta_instruction = (
+        "You are EmoLLM, a professional mental health counseling assistant "
+        "developed by the EmoLLM team. You have extensive knowledge of "
+        "psychology and counseling techniques. "
+        "Your goal is to provide supportive, empathetic, and professional "
+        "responses to users experiencing emotional or psychological difficulties. "
+        "Listen carefully to the user's concerns, acknowledge their emotions, "
+        "ask appropriate follow-up questions, and provide helpful guidance. "
+        "Do not claim to provide a definitive medical diagnosis. "
+        "If the user expresses thoughts of self-harm or suicide, encourage "
+        "them to seek immediate professional or emergency help. "
+        "Always respond in English unless the user explicitly asks for another language."
+    )
+    
     total_prompt = f'<s><|im_start|>system\n{meta_instruction}<|im_end|>\n'
     for message in messages:
         cur_content = message['content']
@@ -288,10 +334,10 @@ def main():
     model, tokenizer = load_model()
     print('load model end.')
 
-    user_avator = str(ASSETS_DIR / "user.png")
-    robot_avator = str(ASSETS_DIR / "EmoLLM.png")
+    user_avator = USER_AVATAR
+    robot_avator = ROBOT_AVATAR
 
-    st.title('EmoLLM V3.0 心理咨询室')
+    st.title("EmoLLM V3.0 Mental Health Counseling")
 
     generation_config = prepare_generation_config()
 
@@ -305,7 +351,9 @@ def main():
             st.markdown(message['content'])
 
     # Accept user input
-    if prompt := st.chat_input('我在这里准备好倾听你的心声了~'):
+    if prompt := st.chat_input(
+        "I'm here and ready to listen. Tell me what's on your mind..."
+    ):
         # Display user message in chat message container
         with st.chat_message('user', avatar=user_avator):
             st.markdown(prompt)
