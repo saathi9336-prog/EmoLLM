@@ -300,37 +300,53 @@ cur_query_prompt = (
 )
 
 
-def combine_history(prompt):
-    messages = st.session_state.messages
-    meta_instruction = (
-    "You are EmoLLM, a professional mental health counseling assistant "
-    "developed by the EmoLLM team. "
-    "You have extensive knowledge of psychology and counseling techniques. "
-    "Your goal is to provide supportive, empathetic, and professional "
-    "responses to users experiencing emotional or psychological difficulties. "
-    "Listen carefully to the user's concerns, acknowledge their emotions, "
-    "ask appropriate follow-up questions, and provide helpful guidance. "
-    "Do not claim to provide a definitive medical diagnosis. "
-    "If the user expresses thoughts of self-harm or suicide, encourage "
-    "them to seek immediate professional or emergency help. "
-    "IMPORTANT LANGUAGE RULE: You MUST respond ONLY in English. "
-    "Never respond in Chinese, Japanese, Korean, or any other language. "
-    "This rule applies even when the user writes their message in another language. "
-    "Your entire response must be written in English."
-)
-    
-    total_prompt = f'<s><|im_start|>system\n{meta_instruction}<|im_end|>\n'
-    for message in messages:
-        cur_content = message['content']
-        if message['role'] == 'user':
-            cur_prompt = user_prompt.format(user=cur_content)
-        elif message['role'] == 'robot':
-            cur_prompt = robot_prompt.format(robot=cur_content)
-        else:
-            raise RuntimeError
-        total_prompt += cur_prompt
-    total_prompt = total_prompt + cur_query_prompt.format(user=prompt)
-    return total_prompt
+def combine_history(prompt, tokenizer):
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are EmoLLM, a professional mental health counseling assistant "
+                "developed by the EmoLLM team. "
+                "You have extensive knowledge of psychology and counseling techniques. "
+                "Your goal is to provide supportive, empathetic, and professional "
+                "responses to users experiencing emotional or psychological difficulties. "
+                "Listen carefully to the user's concerns, acknowledge their emotions, "
+                "ask appropriate follow-up questions, and provide helpful guidance. "
+                "Do not claim to provide a definitive medical diagnosis. "
+                "If the user expresses thoughts of self-harm or suicide, encourage "
+                "them to seek immediate professional or emergency help. "
+                "IMPORTANT LANGUAGE RULE: You MUST respond ONLY in English. "
+                "Never respond in Chinese, Japanese, Korean, or any other language. "
+                "This rule applies even when the user writes their message in another language. "
+                "Your entire response must be written in English."
+            )
+        }
+    ]
+
+    # Add previous conversation
+    for message in st.session_state.messages:
+        if message["role"] == "user":
+            messages.append({
+                "role": "user",
+                "content": message["content"]
+            })
+        elif message["role"] == "robot":
+            messages.append({
+                "role": "assistant",
+                "content": message["content"]
+            })
+
+    # Add current user message
+    messages.append({
+        "role": "user",
+        "content": prompt
+    })
+
+    return tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True
+    )
 
 
 def main():
@@ -363,7 +379,7 @@ def main():
         # Display user message in chat message container
         with st.chat_message('user', avatar=user_avator):
             st.markdown(prompt)
-        real_prompt = combine_history(prompt)
+        real_prompt = combine_history(prompt, tokenizer)
         # Add user message to chat history
         st.session_state.messages.append({
             'role': 'user',
