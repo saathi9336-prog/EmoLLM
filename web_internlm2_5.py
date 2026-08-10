@@ -47,7 +47,10 @@ import os
 
 BASE_DIR = "/kaggle/working/EmoLLM"
 
-model_path = os.path.join(BASE_DIR, "model")
+
+model_path = "/kaggle/working/EmoLLMV3.0/model"
+
+
 
 USER_AVATAR = os.path.join(BASE_DIR, "assets", "user.png")
 ROBOT_AVATAR = os.path.join(BASE_DIR, "assets", "EmoLLM.png")
