@@ -246,7 +246,7 @@ def prepare_generation_config():
         st.image(
             LOGO_PATH,
             caption="EmoLLM Logo",
-            use_column_width=True
+            width="stretch"
         )
 
         st.markdown(
