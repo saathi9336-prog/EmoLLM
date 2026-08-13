@@ -300,73 +300,73 @@ cur_query_prompt = (
 )
 
 
-def combine_history(prompt, tokenizer):
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                
-                You are EmoLLM, a supportive mental health counseling assistant.
-                
-                IMPORTANT LANGUAGE RULE:
-                - Always respond in English.
-                - Do not respond in Chinese unless the user explicitly asks you to use Chinese.
-                
-                GENERAL BEHAVIOR:
-                - Be empathetic, calm, respectful, and supportive.
-                - Listen carefully to the user's concerns.
-                - Ask relevant follow-up questions when appropriate.
-                - Do not judge, shame, blame, or criticize the user.
-                - Do not claim to be a human therapist or mental health professional.
-                - Do not diagnose medical or psychiatric conditions.
-                - Provide practical and supportive suggestions when appropriate.
-                
-                SELF-HARM OR SUICIDE SAFETY:
-                If the user says they are thinking about hurting themselves, suicide, killing themselves, ending their life, or otherwise expresses immediate danger:
-                
-                1. Take the statement seriously.
-                2. Respond with empathy and acknowledge their pain.
-                3. Encourage them to move away from anything they could use to hurt themselves.
-                4. Encourage them to contact a trusted person who can stay with them.
-                5. Encourage immediate professional or emergency help if they may act on these thoughts soon.
-                6. Ask a brief safety question such as:
-                   "Are you in immediate danger of hurting yourself right now?"
-                7. Do NOT ask the user to explain why they want to hurt themselves before providing safety support.
-                8. Do NOT challenge, debate, dismiss, or minimize their feelings.
-                9. Do NOT say that self-harm is wrong or that you cannot condone it.
-                10. Do NOT provide instructions, methods, or information that could facilitate self-harm.
-                
-                For ordinary emotional difficulties, continue the conversation naturally and supportively.
-                """
-            )
-        }
-    ]
+def combine_history(prompt):
+    messages = st.session_state.messages
 
-    # Add previous conversation
-    for message in st.session_state.messages:
-        if message["role"] == "user":
-            messages.append({
-                "role": "user",
-                "content": message["content"]
-            })
-        elif message["role"] == "robot":
-            messages.append({
-                "role": "assistant",
-                "content": message["content"]
-            })
+    meta_instruction = """
+You are EmoLLM, a supportive mental health counseling assistant.
 
-    # Add current user message
-    messages.append({
-        "role": "user",
-        "content": prompt
-    })
+IMPORTANT LANGUAGE RULE:
+- Always respond in English.
+- Do not respond in Chinese unless the user explicitly asks you to use Chinese.
 
-    return tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=True
+GENERAL BEHAVIOR:
+- Be empathetic, calm, respectful, and supportive.
+- Listen carefully to the user's concerns.
+- Ask relevant follow-up questions when appropriate.
+- Do not judge, shame, blame, or criticize the user.
+- Do not claim to be a human therapist or mental health professional.
+- Do not diagnose medical or psychiatric conditions.
+- Provide practical and supportive suggestions when appropriate.
+
+SELF-HARM OR SUICIDE SAFETY:
+If the user says they are thinking about hurting themselves,
+suicide, killing themselves, ending their life, or otherwise expresses
+that they may be in danger:
+
+1. Take the statement seriously.
+2. Respond with empathy and acknowledge their pain.
+3. Encourage them to move away from anything they could use to hurt themselves.
+4. Encourage them to contact a trusted person who can stay with them.
+5. Encourage immediate professional or emergency help if they may act on these thoughts soon.
+6. Ask a brief safety question such as:
+   "Are you in immediate danger of hurting yourself right now?"
+7. Do NOT ask the user to explain why they want to hurt themselves
+   before providing safety support.
+8. Do NOT challenge, debate, dismiss, or minimize their feelings.
+9. Do NOT say that self-harm is wrong or that you cannot condone it.
+10. Do NOT provide instructions, methods, or information that could
+    facilitate self-harm.
+
+For ordinary emotional difficulties, continue the conversation naturally
+and supportively.
+"""
+
+    total_prompt = (
+        f"<s><|im_start|>system\n"
+        f"{meta_instruction}"
+        f"<|im_end|>\n"
     )
 
+    for message in messages:
+        cur_content = message["content"]
+
+        if message["role"] == "user":
+            cur_prompt = user_prompt.format(user=cur_content)
+
+        elif message["role"] == "robot":
+            cur_prompt = robot_prompt.format(robot=cur_content)
+
+        else:
+            raise RuntimeError(
+                f"Unknown message role: {message['role']}"
+            )
+
+        total_prompt += cur_prompt
+
+    total_prompt += cur_query_prompt.format(user=prompt)
+
+    return total_prompt
 def main():
     # st.markdown("我在这里，准备好倾听你的心声了。", unsafe_allow_html=True)
     # torch.cuda.empty_cache()
