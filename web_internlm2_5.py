@@ -698,40 +698,53 @@ def get_safety_response():
     )
 def answer_memory_question(prompt):
     """
-    Answer simple conversation-memory questions using only
-    information explicitly stored in st.session_state.messages.
+    Answer conversation-memory questions using ONLY information
+    explicitly provided by the user in st.session_state.messages.
+
+    Important:
+    - Never infer a concern from a related statement.
+    - Never invent missing information.
+    - Different memory questions use different types of evidence.
 
     Returns:
         str | None
-        A deterministic answer if the prompt is a memory question,
-        otherwise None.
+        Deterministic answer for a recognized memory question.
+        None if the prompt is not a memory question.
     """
 
     prompt_lower = prompt.lower().strip()
+
+    # ==================================================
+    # MEMORY QUESTION PATTERNS
+    # ==================================================
 
     memory_questions = [
         "what was i worried about earlier",
         "what was i worried about",
         "what am i worried about",
+
         "what did i say earlier",
         "what did i tell you earlier",
         "what did i tell you",
         "what did i mention earlier",
         "what did i mention",
+
         "what was i talking about earlier",
         "what was i talking about",
+
         "what problem was i having earlier",
         "what problem was i having",
         "what problem am i having",
         "what was my problem earlier",
+
         "do you remember what i said",
         "do you remember what i told you",
         "do you remember what i mentioned",
     ]
 
-    # --------------------------------------------------
-    # Check whether this is a memory question
-    # --------------------------------------------------
+    # ==================================================
+    # CHECK WHETHER THIS IS A MEMORY QUESTION
+    # ==================================================
 
     is_memory_question = any(
         question in prompt_lower
@@ -741,21 +754,18 @@ def answer_memory_question(prompt):
     if not is_memory_question:
         return None
 
-    # --------------------------------------------------
-    # Get conversation history
-    # --------------------------------------------------
+    # ==================================================
+    # GET CONVERSATION HISTORY
+    # ==================================================
 
-    messages = st.session_state.get("messages", [])
+    messages = st.session_state.get(
+        "messages",
+        []
+    )
 
-    if not messages:
-        return (
-            "I don't have that information available "
-            "in the current conversation."
-        )
-
-    # --------------------------------------------------
-    # Collect explicit user statements
-    # --------------------------------------------------
+    # ==================================================
+    # COLLECT ONLY USER MESSAGES
+    # ==================================================
 
     user_messages = []
 
@@ -764,90 +774,239 @@ def answer_memory_question(prompt):
         if message.get("role") != "user":
             continue
 
-        content = message.get("content", "").strip()
+        content = message.get(
+            "content",
+            ""
+        ).strip()
 
         if not content:
             continue
 
         user_messages.append(content)
 
-    # --------------------------------------------------
-    # Nothing available
-    # --------------------------------------------------
+    # ==================================================
+    # NO USER HISTORY
+    # ==================================================
 
     if not user_messages:
+
         return (
             "I don't have that information available "
             "in the current conversation."
         )
 
-    # --------------------------------------------------
-    # Specific memory question:
-    # "What problem am I having?"
-    # --------------------------------------------------
+    # ==================================================
+    # 1. WORRY / CONCERN MEMORY
+    # ==================================================
+
+    # Examples:
+    #
+    # User:
+    #   I am worried about my mathematics exam.
+    #
+    # Question:
+    #   What am I worried about?
+    #
+    # Correct:
+    #   You told me that you are worried about your
+    #   mathematics exam.
+    #
+    # But:
+    #
+    # User:
+    #   I have been studying mathematics for several weeks.
+    #
+    # Question:
+    #   What am I worried about?
+    #
+    # Correct:
+    #   I don't have that information...
+    #
+    # because studying mathematics does NOT explicitly
+    # mean the user is worried about mathematics.
+
+    if (
+        "worried" in prompt_lower
+        or "worry" in prompt_lower
+        or "concerned" in prompt_lower
+        or "concern" in prompt_lower
+    ):
+
+        worried_statements = []
+
+        for message in user_messages:
+
+            text = message.lower().strip()
+
+            # ------------------------------------------
+            # Explicit worry statements
+            # ------------------------------------------
+
+            explicit_worry = (
+                "i am worried" in text
+                or "i'm worried" in text
+                or "im worried" in text
+                or "i was worried" in text
+                or "i'm concerned" in text
+                or "im concerned" in text
+                or "i am concerned" in text
+                or "i was concerned" in text
+                or "i worry about" in text
+                or "i'm worrying about" in text
+                or "im worrying about" in text
+                or "i am worrying about" in text
+            )
+
+            if explicit_worry:
+
+                worried_statements.append(message)
+
+        # ----------------------------------------------
+        # Explicit worry found
+        # ----------------------------------------------
+
+        if worried_statements:
+
+            latest = worried_statements[-1]
+
+            return (
+                "You told me that "
+                + latest
+            )
+
+        # ----------------------------------------------
+        # No explicit worry found
+        # ----------------------------------------------
+
+        return (
+            "I don't have that information available "
+            "in the current conversation. You haven't "
+            "explicitly told me what you are worried about."
+        )
+
+    # ==================================================
+    # 2. PROBLEM MEMORY
+    # ==================================================
 
     if (
         "what problem" in prompt_lower
         or "what was my problem" in prompt_lower
     ):
 
-        mathematics_statements = []
+        problem_statements = []
 
         for message in user_messages:
 
-            text = message.lower()
+            text = message.lower().strip()
 
-            if (
-                "mathematics" in text
-                or "math" in text
-                or "mathematical" in text
-            ):
-                mathematics_statements.append(message)
+            # ------------------------------------------
+            # Explicit problem statements
+            # ------------------------------------------
+
+            explicit_problem = (
+                "i have a problem" in text
+                or "i'm having a problem" in text
+                or "im having a problem" in text
+                or "i am having a problem" in text
+                or "i had a problem" in text
+                or "i'm having trouble" in text
+                or "im having trouble" in text
+                or "i am having trouble" in text
+                or "i had trouble" in text
+                or "i keep getting stuck" in text
+                or "i am stuck" in text
+                or "i'm stuck" in text
+                or "im stuck" in text
+                or "i cannot solve" in text
+                or "i can't solve" in text
+                or "i cannot understand" in text
+                or "i can't understand" in text
+                or "i am struggling" in text
+                or "i'm struggling" in text
+                or "im struggling" in text
+            )
+
+            if explicit_problem:
+
+                problem_statements.append(message)
 
         # ----------------------------------------------
-        # Explicit mathematics statement found
+        # Explicit problem found
         # ----------------------------------------------
 
-        if mathematics_statements:
+        if problem_statements:
+
+            latest = problem_statements[-1]
 
             return (
                 "You told me that "
-                + mathematics_statements[-1]
+                + latest
             )
 
-    # --------------------------------------------------
-    # "What am I worried about?"
-    # --------------------------------------------------
+        # ----------------------------------------------
+        # No explicit problem found
+        # ----------------------------------------------
 
-    if "worried" in prompt_lower:
+        return (
+            "I don't have that information available "
+            "in the current conversation. You haven't "
+            "explicitly told me what problem you were having."
+        )
 
-        worried_statements = []
+    # ==================================================
+    # 3. GENERAL MEMORY QUESTIONS
+    # ==================================================
 
-        for message in user_messages:
+    # For questions such as:
+    #
+    # "What did I say earlier?"
+    #
+    # We can safely return an actual previous user
+    # statement because the user explicitly asked what
+    # they said.
+    #
+    # We do NOT interpret or infer anything from it.
 
-            text = message.lower()
+    if (
+        "what did i say" in prompt_lower
+        or "what did i tell you" in prompt_lower
+        or "what did i mention" in prompt_lower
+    ):
 
-            if "worried" in text or "worry" in text:
+        return (
+            "Earlier, you told me: "
+            + user_messages[-1]
+        )
 
-                worried_statements.append(message)
+    # ==================================================
+    # 4. "WHAT WAS I TALKING ABOUT?"
+    # ==================================================
 
-        if worried_statements:
+    if "what was i talking about" in prompt_lower:
 
-            return (
-                "You told me that "
-                + worried_statements[-1]
-            )
+        return (
+            "Earlier, you told me: "
+            + user_messages[-1]
+        )
 
-    # --------------------------------------------------
-    # General memory question
-    # --------------------------------------------------
+    # ==================================================
+    # 5. DO YOU REMEMBER...?
+    # ==================================================
 
-    # Return the most recent explicit user statement
-    # rather than inventing information.
+    if "do you remember" in prompt_lower:
+
+        return (
+            "Earlier, you told me: "
+            + user_messages[-1]
+        )
+
+    # ==================================================
+    # SAFETY FALLBACK
+    # ==================================================
 
     return (
-        "Earlier, you told me: "
-        + user_messages[-1]
+        "I don't have that information available "
+        "in the current conversation."
     )
 def main():
 
