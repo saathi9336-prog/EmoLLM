@@ -56,6 +56,14 @@ USER_AVATAR = os.path.join(BASE_DIR, "assets", "user.png")
 ROBOT_AVATAR = os.path.join(BASE_DIR, "assets", "EmoLLM.png")
 LOGO_PATH = os.path.join(BASE_DIR, "assets", "EmoLLM_logo_L.png")
 
+SAFETY_RESPONSE = """I'm really sorry that you're going through this. I'm glad you told me. Your safety is important right now.
+
+If you feel you might hurt yourself, please move away from anything you could use to hurt yourself and stay with someone you trust.
+
+Please contact a trusted person and stay with them if possible. If you might act on these thoughts, please contact a mental-health professional or emergency service in your area.
+
+Are you in immediate danger of hurting yourself right now, or have you already hurt yourself?"""
+
 @dataclass
 class GenerationConfig:
     # this config is used for chat to provide more diversity
