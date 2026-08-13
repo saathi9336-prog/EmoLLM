@@ -74,69 +74,103 @@ def generate_interactive(
     generation_config: Optional[GenerationConfig] = None,
     logits_processor: Optional[LogitsProcessorList] = None,
     stopping_criteria: Optional[StoppingCriteriaList] = None,
-    prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor],
-                                                List[int]]] = None,
+    prefix_allowed_tokens_fn: Optional[
+        Callable[[int, torch.Tensor], List[int]]
+    ] = None,
     additional_eos_token_id: Optional[int] = None,
     **kwargs,
 ):
-    inputs = tokenizer([prompt], padding=True, return_tensors='pt')
-    input_length = len(inputs['input_ids'][0])
+
+    # --------------------------------------------------
+    # Tokenize prompt
+    # --------------------------------------------------
+    inputs = tokenizer(
+        [prompt],
+        padding=True,
+        return_tensors="pt"
+    )
+
+    input_length = len(inputs["input_ids"][0])
+
+    # Move tensors to GPU
     for k, v in inputs.items():
         inputs[k] = v.cuda()
-    input_ids = inputs['input_ids']
-    _, input_ids_seq_length = input_ids.shape[0], input_ids.shape[-1]
+
+    input_ids = inputs["input_ids"]
+
+    _, input_ids_seq_length = input_ids.shape
+
+    # --------------------------------------------------
+    # Generation configuration
+    # --------------------------------------------------
     if generation_config is None:
         generation_config = model.generation_config
+
     generation_config = copy.deepcopy(generation_config)
+
     model_kwargs = generation_config.update(**kwargs)
-    bos_token_id, eos_token_id = (  # noqa: F841  # pylint: disable=W0612
-        generation_config.bos_token_id,
-        generation_config.eos_token_id,
-    )
+
+    bos_token_id = generation_config.bos_token_id
+    eos_token_id = generation_config.eos_token_id
+
     if isinstance(eos_token_id, int):
         eos_token_id = [eos_token_id]
+
     if additional_eos_token_id is not None:
         eos_token_id.append(additional_eos_token_id)
-    has_default_max_length = kwargs.get(
-        'max_length') is None and generation_config.max_length is not None
-    if has_default_max_length and generation_config.max_new_tokens is None:
+
+    # --------------------------------------------------
+    # Length configuration
+    # --------------------------------------------------
+    has_default_max_length = (
+        kwargs.get("max_length") is None
+        and generation_config.max_length is not None
+    )
+
+    if (
+        has_default_max_length
+        and generation_config.max_new_tokens is None
+    ):
         warnings.warn(
-            f"Using 'max_length''s default \
-                ({repr(generation_config.max_length)}) \
-                to control the generation length. "
-            'This behaviour is deprecated and will be removed from the \
-                config in v5 of Transformers -- we'
-            ' recommend using `max_new_tokens` to control the maximum \
-                length of the generation.',
+            f"Using 'max_length' default "
+            f"({repr(generation_config.max_length)}) "
+            "to control the generation length. "
+            "Consider using 'max_new_tokens'.",
             UserWarning,
         )
+
     elif generation_config.max_new_tokens is not None:
-        generation_config.max_length = generation_config.max_new_tokens + \
-            input_ids_seq_length
-        if not has_default_max_length:
-            logger.warn(  # pylint: disable=W4902
-                f"Both 'max_new_tokens' (={generation_config.max_new_tokens}) "
-                f"and 'max_length'(={generation_config.max_length}) seem to "
-                "have been set. 'max_new_tokens' will take precedence. "
-                'Please refer to the documentation for more information. '
-                '(https://huggingface.co/docs/transformers/main/'
-                'en/main_classes/text_generation)',
-                UserWarning,
-            )
 
+        generation_config.max_length = (
+            generation_config.max_new_tokens
+            + input_ids_seq_length
+        )
+
+    # --------------------------------------------------
+    # Check input length
+    # --------------------------------------------------
     if input_ids_seq_length >= generation_config.max_length:
-        input_ids_string = 'input_ids'
-        logger.warning(
-            f'Input length of {input_ids_string} is {input_ids_seq_length}, '
-            f"but 'max_length' is set to {generation_config.max_length}. "
-            'This can lead to unexpected behavior. You should consider'
-            " increasing 'max_new_tokens'.")
 
-    # 2. Set generation parameters if not already defined
-    logits_processor = logits_processor if logits_processor is not None \
+        logger.warning(
+            f"Input length is {input_ids_seq_length}, "
+            f"but max_length is {generation_config.max_length}. "
+            "Consider increasing max_new_tokens."
+        )
+
+    # --------------------------------------------------
+    # Logits processor
+    # --------------------------------------------------
+    logits_processor = (
+        logits_processor
+        if logits_processor is not None
         else LogitsProcessorList()
-    stopping_criteria = stopping_criteria if stopping_criteria is not None \
+    )
+
+    stopping_criteria = (
+        stopping_criteria
+        if stopping_criteria is not None
         else StoppingCriteriaList()
+    )
 
     logits_processor = model._get_logits_processor(
         generation_config=generation_config,
@@ -148,15 +182,33 @@ def generate_interactive(
 
     stopping_criteria = model._get_stopping_criteria(
         generation_config=generation_config,
-        stopping_criteria=stopping_criteria)
-    logits_warper = model._get_logits_warper(generation_config)
+        stopping_criteria=stopping_criteria,
+    )
 
-    unfinished_sequences = input_ids.new(input_ids.shape[0]).fill_(1)
+    logits_warper = model._get_logits_warper(
+        generation_config
+    )
+
+    # --------------------------------------------------
+    # Generation state
+    # --------------------------------------------------
+    unfinished_sequences = (
+        input_ids.new(input_ids.shape[0]).fill_(1)
+    )
+
     scores = None
+
+    # --------------------------------------------------
+    # Generation loop
+    # --------------------------------------------------
     while True:
+
         model_inputs = model.prepare_inputs_for_generation(
-            input_ids, **model_kwargs)
-        # forward pass to get next token
+            input_ids,
+            **model_kwargs
+        )
+
+        # Forward pass
         outputs = model(
             **model_inputs,
             return_dict=True,
@@ -166,36 +218,99 @@ def generate_interactive(
 
         next_token_logits = outputs.logits[:, -1, :]
 
-        # pre-process distribution
-        next_token_scores = logits_processor(input_ids, next_token_logits)
-        next_token_scores = logits_warper(input_ids, next_token_scores)
+        # Process logits
+        next_token_scores = logits_processor(
+            input_ids,
+            next_token_logits
+        )
 
-        # sample
-        probs = nn.functional.softmax(next_token_scores, dim=-1)
+        next_token_scores = logits_warper(
+            input_ids,
+            next_token_scores
+        )
+
+        # --------------------------------------------------
+        # Sample next token
+        # --------------------------------------------------
+        probs = nn.functional.softmax(
+            next_token_scores,
+            dim=-1
+        )
+
         if generation_config.do_sample:
-            next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
+
+            next_tokens = torch.multinomial(
+                probs,
+                num_samples=1
+            ).squeeze(1)
+
         else:
-            next_tokens = torch.argmax(probs, dim=-1)
 
-        # update generated ids, model inputs, and length for next step
-        input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+            next_tokens = torch.argmax(
+                probs,
+                dim=-1
+            )
+
+        # --------------------------------------------------
+        # Append token
+        # --------------------------------------------------
+        input_ids = torch.cat(
+            [
+                input_ids,
+                next_tokens[:, None]
+            ],
+            dim=-1
+        )
+
         model_kwargs = model._update_model_kwargs_for_generation(
-            outputs, model_kwargs, is_encoder_decoder=False)
-        unfinished_sequences = unfinished_sequences.mul(
-            (min(next_tokens != i for i in eos_token_id)).long())
+            outputs,
+            model_kwargs,
+            is_encoder_decoder=False,
+        )
 
+        # --------------------------------------------------
+        # Check EOS
+        # --------------------------------------------------
+        for eos_id in eos_token_id:
+
+            unfinished_sequences = unfinished_sequences.mul(
+                next_tokens.ne(eos_id).long()
+            )
+
+        # --------------------------------------------------
+        # Decode ONLY newly generated tokens
+        # --------------------------------------------------
         output_token_ids = input_ids[0].cpu().tolist()
-        output_token_ids = output_token_ids[input_length:]
-        for each_eos_token_id in eos_token_id:
-            if output_token_ids[-1] == each_eos_token_id:
-                output_token_ids = output_token_ids[:-1]
-        response = tokenizer.decode(output_token_ids)
 
+        output_token_ids = output_token_ids[input_length:]
+
+        # Remove EOS tokens
+        while (
+            output_token_ids
+            and output_token_ids[-1] in eos_token_id
+        ):
+            output_token_ids.pop()
+
+        response = tokenizer.decode(
+            output_token_ids,
+            skip_special_tokens=True
+        )
+
+        # --------------------------------------------------
+        # Yield response to Streamlit
+        # --------------------------------------------------
         yield response
-        # stop when each sentence is finished
-        # or if we exceed the maximum length
-        if unfinished_sequences.max() == 0 or stopping_criteria(
-                input_ids, scores):
+
+        # --------------------------------------------------
+        # Stop generation
+        # --------------------------------------------------
+        if unfinished_sequences.max() == 0:
+            break
+
+        if stopping_criteria(
+            input_ids,
+            scores
+        ):
             break
 
 
@@ -299,10 +414,7 @@ cur_query_prompt = (
     '<|im_start|>assistant\n'
 )
 
-
 def combine_history(prompt, tokenizer):
-
-    messages = []
 
     # --------------------------------------------------
     # System instruction
@@ -314,37 +426,44 @@ counseling assistant.
 Always respond in English.
 
 Your role is to:
+
 - listen carefully to the user's concerns
 - acknowledge and validate their emotions
 - respond with empathy and warmth
 - ask relevant follow-up questions when appropriate
 - provide practical and supportive suggestions
 - never judge, shame, or criticize the user
-- never claim to provide a medical diagnosis
+- never claim to provide a definitive medical diagnosis
 
 IMPORTANT SAFETY RULE:
 
-If the user says that they are thinking about hurting themselves,
-want to die, want to kill themselves, or otherwise expresses
-self-harm or suicide-related thoughts:
+If the user expresses thoughts about suicide, self-harm,
+hurting themselves, wanting to die, or not wanting to live:
 
-1. Take the statement seriously.
-2. Respond with empathy and concern.
-3. Do not ask the user to justify or prove why they feel this way.
-4. Encourage them to move away from anything they could use to
-   hurt themselves.
-5. Encourage them to contact a trusted person who can stay with them.
-6. Encourage immediate professional or emergency help if they
-   may act on these thoughts.
-7. Ask whether they are in immediate danger or have already
-   hurt themselves.
-8. Keep the response focused on immediate safety and support.
+- Take the statement seriously.
+- Respond with empathy and concern.
+- Do not ask the user to justify why they feel this way.
+- Do not provide instructions or methods for self-harm.
+- Encourage the person to move away from anything they could
+  use to hurt themselves.
+- Encourage them to stay with a trusted person.
+- Encourage them to contact a mental-health professional
+  or emergency service if they may act on these thoughts.
+- Ask whether they are in immediate danger or have already
+  hurt themselves.
 
-Do not provide instructions, methods, or details about self-harm.
+For ordinary emotional concerns, provide supportive,
+empathetic and practical responses.
+
+Never repeat the user's message as your response.
 
 Always respond naturally as the assistant.
-Never repeat the user's message as your response.
 """
+
+    # --------------------------------------------------
+    # Conversation messages
+    # --------------------------------------------------
+    messages = []
 
     messages.append({
         "role": "system",
@@ -352,28 +471,28 @@ Never repeat the user's message as your response.
     })
 
     # --------------------------------------------------
-    # Add previous conversation
+    # Previous conversation
     # --------------------------------------------------
     if "messages" in st.session_state:
 
         for message in st.session_state.messages:
 
-            role = message["role"]
+            if message["role"] == "user":
 
-            if role == "user":
                 messages.append({
                     "role": "user",
                     "content": message["content"]
                 })
 
-            elif role == "robot":
+            elif message["role"] == "robot":
+
                 messages.append({
                     "role": "assistant",
                     "content": message["content"]
                 })
 
     # --------------------------------------------------
-    # Add current user message
+    # Current user message
     # --------------------------------------------------
     messages.append({
         "role": "user",
@@ -381,7 +500,7 @@ Never repeat the user's message as your response.
     })
 
     # --------------------------------------------------
-    # Use InternLM tokenizer's official chat template
+    # Use InternLM's chat template
     # --------------------------------------------------
     try:
 
@@ -393,9 +512,15 @@ Never repeat the user's message as your response.
 
     except Exception as e:
 
-        print("Chat template failed:", e)
+        print(
+            "WARNING: tokenizer chat template failed:"
+        )
 
-        # Fallback for InternLM format
+        print(e)
+
+        # --------------------------------------------------
+        # Fallback InternLM format
+        # --------------------------------------------------
         total_prompt = (
             "<s>"
             "<|im_start|>system\n"
@@ -421,11 +546,18 @@ Never repeat the user's message as your response.
                     + "<|im_end|>\n"
                 )
 
-        total_prompt += "<|im_start|>assistant\n"
+        total_prompt += (
+            "<|im_start|>assistant\n"
+        )
 
-    print("\n===== GENERATED PROMPT =====")
+    # --------------------------------------------------
+    # Debug output
+    # --------------------------------------------------
+    print()
+    print("===== GENERATED PROMPT =====")
     print(total_prompt)
-    print("============================\n")
+    print("============================")
+    print()
 
     return total_prompt
 def is_self_harm_message(text):
@@ -472,47 +604,74 @@ def get_safety_response():
         "mental-health professional for immediate support."
     )
 def main():
+
     print("load model begin.")
 
+    # --------------------------------------------------
+    # Load model
+    # --------------------------------------------------
     model, tokenizer = load_model()
 
     print("load model end.")
 
+    # --------------------------------------------------
+    # Avatars
+    # --------------------------------------------------
     user_avatar = USER_AVATAR
     robot_avatar = ROBOT_AVATAR
 
-    st.title("EmoLLM V3.0 Mental Health Counseling")
+    # --------------------------------------------------
+    # Page title
+    # --------------------------------------------------
+    st.title(
+        "EmoLLM V3.0 Mental Health Counseling"
+    )
 
+    # --------------------------------------------------
+    # Generation settings
+    # --------------------------------------------------
     generation_config = prepare_generation_config()
 
-    # Initialize chat history
+    # --------------------------------------------------
+    # Initialize conversation history
+    # --------------------------------------------------
     if "messages" not in st.session_state:
+
         st.session_state.messages = []
 
+    # --------------------------------------------------
     # Display previous messages
+    # --------------------------------------------------
     for message in st.session_state.messages:
+
         with st.chat_message(
             message["role"],
             avatar=message.get("avatar")
         ):
-            st.markdown(message["content"])
 
+            st.markdown(
+                message["content"]
+            )
+
+    # --------------------------------------------------
     # User input
+    # --------------------------------------------------
     if prompt := st.chat_input(
         "I'm here and ready to listen. Tell me what's on your mind..."
     ):
 
         # --------------------------------------------------
-        # 1. Display user's message
+        # Display user message
         # --------------------------------------------------
         with st.chat_message(
             "user",
             avatar=user_avatar
         ):
+
             st.markdown(prompt)
 
         # --------------------------------------------------
-        # 2. Save user message BEFORE generating response
+        # Save user message
         # --------------------------------------------------
         st.session_state.messages.append({
             "role": "user",
@@ -521,20 +680,57 @@ def main():
         })
 
         # --------------------------------------------------
-        # 3. Build complete conversation prompt
+        # Self-harm detection
+        # --------------------------------------------------
+        self_harm_keywords = [
+
+            "kill myself",
+            "killing myself",
+
+            "suicide",
+            "suicidal",
+
+            "hurt myself",
+            "hurting myself",
+
+            "harm myself",
+            "harming myself",
+
+            "self harm",
+            "self-harm",
+
+            "want to die",
+            "wants to die",
+
+            "wish I was dead",
+            "wish i was dead",
+
+            "don't want to live",
+            "dont want to live",
+
+            "do not want to live",
+
+            "end my life",
+            "ending my life"
+        ]
+
+        prompt_lower = prompt.lower()
+
+        is_self_harm = any(
+            keyword in prompt_lower
+            for keyword in self_harm_keywords
+        )
+
+        # --------------------------------------------------
+        # Build prompt
         # --------------------------------------------------
         real_prompt = combine_history(
             prompt,
             tokenizer
         )
 
-        # Debugging
-        print("\n===== GENERATED PROMPT =====")
-        print(real_prompt)
-        print("============================\n")
-
         # --------------------------------------------------
-        # 4. Generate model response
+        # Generate assistant response
         # --------------------------------------------------
         with st.chat_message(
             "robot",
@@ -543,38 +739,77 @@ def main():
 
             message_placeholder = st.empty()
 
-            cur_response = ""
-
-            try:
-
-                for cur_response in generate_interactive(
-                    model=model,
-                    tokenizer=tokenizer,
-                    prompt=real_prompt,
-                    additional_eos_token_id=92542,
-                    **asdict(generation_config),
-                ):
-
-                    message_placeholder.markdown(
-                        cur_response + "▌"
-                    )
-
-                # Final response
-                message_placeholder.markdown(cur_response)
-
-            except Exception as e:
+            # ==================================================
+            # SAFETY RESPONSE
+            # ==================================================
+            if is_self_harm:
 
                 cur_response = (
-                    "I'm sorry, but I encountered an error while "
-                    "generating a response. Please try again."
+                    "I'm really sorry that you're going through "
+                    "this. I'm glad you told me. Your safety is "
+                    "important right now.\n\n"
+                    "If you feel you might hurt yourself, please "
+                    "move away from anything you could use to hurt "
+                    "yourself and stay with someone you trust. "
+                    "Please contact a mental-health professional "
+                    "or emergency service in your area if you "
+                    "might act on these thoughts.\n\n"
+                    "If possible, tell someone you trust exactly "
+                    "what you're experiencing so they can stay "
+                    "with you.\n\n"
+                    "Are you in immediate danger of hurting "
+                    "yourself right now, or have you already "
+                    "hurt yourself?"
                 )
 
-                message_placeholder.error(
-                    f"Generation error: {e}"
+                message_placeholder.markdown(
+                    cur_response
                 )
+
+            # ==================================================
+            # NORMAL MODEL RESPONSE
+            # ==================================================
+            else:
+
+                cur_response = ""
+
+                try:
+
+                    for cur_response in generate_interactive(
+                        model=model,
+                        tokenizer=tokenizer,
+                        prompt=real_prompt,
+                        additional_eos_token_id=92542,
+                        **asdict(generation_config),
+                    ):
+
+                        message_placeholder.markdown(
+                            cur_response + "▌"
+                        )
+
+                    message_placeholder.markdown(
+                        cur_response
+                    )
+
+                except Exception as e:
+
+                    print(
+                        "Generation error:",
+                        repr(e)
+                    )
+
+                    cur_response = (
+                        "I'm sorry, but I encountered an "
+                        "error while generating a response. "
+                        "Please try again."
+                    )
+
+                    message_placeholder.error(
+                        f"Generation error: {e}"
+                    )
 
         # --------------------------------------------------
-        # 5. Save assistant response
+        # Save assistant response
         # --------------------------------------------------
         st.session_state.messages.append({
             "role": "robot",
@@ -583,11 +818,11 @@ def main():
         })
 
         # --------------------------------------------------
-        # 6. Free unused CUDA memory
+        # Clear CUDA cache
         # --------------------------------------------------
         if torch.cuda.is_available():
-            torch.cuda.empty_cache()
 
+            torch.cuda.empty_cache()
 
 if __name__ == "__main__":
     main()
