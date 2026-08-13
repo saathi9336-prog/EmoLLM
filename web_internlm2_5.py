@@ -440,6 +440,31 @@ Your role is to:
 For ordinary emotional concerns, provide supportive,
 empathetic and practical responses.
 
+IMPORTANT CONVERSATION MEMORY RULE:
+
+Only use information contained in the conversation messages
+provided to you in the current prompt.
+
+Never invent, assume, or fabricate previous conversations,
+events, people, concerns, or user statements.
+
+If the user asks:
+
+- "What was I worried about earlier?"
+- "What did I say earlier?"
+- "What did I tell you before?"
+- "Do you remember what I said?"
+- or asks about something that is not present in the
+  conversation provided to you,
+
+do not guess or fabricate an answer.
+
+Instead, clearly say that you do not have that information
+available in the current conversation.
+
+If previous conversation messages are actually provided,
+you may use those messages to answer questions about them.
+
 IMPORTANT SAFETY RULE:
 
 If the user expresses thoughts about suicide, self-harm,
@@ -452,53 +477,59 @@ hurting themselves, wanting to die, or not wanting to live:
 - Encourage the person to move away from anything they could
   use to hurt themselves.
 - Encourage them to stay with a trusted person.
+- Encourage them to contact a trusted person and stay with
+  someone they trust.
 - Encourage them to contact a mental-health professional
   or emergency service if they may act on these thoughts.
 - Ask whether they are in immediate danger or have already
   hurt themselves.
+
+Never minimize, dismiss, or judge expressions of self-harm
+or suicidal thoughts.
 """
 
     # --------------------------------------------------
-    # Build conversation messages
+    # Create conversation messages
     # --------------------------------------------------
-    messages = [
-        {
-            "role": "system",
-            "content": system_prompt.strip()
-        }
-    ]
+    messages = []
+
+    # System message
+    messages.append({
+        "role": "system",
+        "content": system_prompt.strip()
+    })
 
     # --------------------------------------------------
-    # Add previous conversation
-    #
-    # IMPORTANT:
-    # The current user message has already been added to
-    # st.session_state.messages by main().
-    # Therefore we DO NOT append prompt separately.
+    # Add previous conversation history
     # --------------------------------------------------
     if "messages" in st.session_state:
 
         for message in st.session_state.messages:
 
-            role = message["role"]
-            content = message["content"]
-
-            if role == "user":
+            if message["role"] == "user":
 
                 messages.append({
                     "role": "user",
-                    "content": content
+                    "content": message["content"]
                 })
 
-            elif role == "robot":
+            elif message["role"] == "robot":
 
                 messages.append({
                     "role": "assistant",
-                    "content": content
+                    "content": message["content"]
                 })
 
     # --------------------------------------------------
-    # Use InternLM2.5 chat template
+    # Add current user message
+    # --------------------------------------------------
+    messages.append({
+        "role": "user",
+        "content": prompt
+    })
+
+    # --------------------------------------------------
+    # Generate InternLM chat prompt
     # --------------------------------------------------
     try:
 
@@ -523,6 +554,7 @@ hurting themselves, wanting to die, or not wanting to live:
             + "<|im_end|>\n"
         )
 
+        # Add conversation history
         for message in messages[1:]:
 
             if message["role"] == "user":
@@ -541,17 +573,18 @@ hurting themselves, wanting to die, or not wanting to live:
                     + "<|im_end|>\n"
                 )
 
-        # Tell the model that the next message is its response
-        total_prompt += "<|im_start|>assistant\n"
+        # Generation prompt
+        total_prompt += (
+            "<|im_start|>assistant\n"
+        )
 
     # --------------------------------------------------
-    # Debug output
+    # TEMPORARY DEBUG
+    # Remove this after testing
     # --------------------------------------------------
-    # Debug: show generated prompt inside Streamlit
     with st.expander("🔍 Debug: Generated Prompt"):
         st.code(total_prompt)
-    
-    
+
     return total_prompt
 def is_self_harm_message(text):
     text = text.lower()
