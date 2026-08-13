@@ -624,36 +624,38 @@ def main():
 
     print("load model begin.")
 
+    # --------------------------------------------------
     # Load model and tokenizer
+    # --------------------------------------------------
     model, tokenizer = load_model()
 
     print("load model end.")
 
-    # -----------------------------------------
+    # --------------------------------------------------
     # Avatar paths
-    # -----------------------------------------
+    # --------------------------------------------------
     user_avator = USER_AVATAR
     robot_avator = ROBOT_AVATAR
 
-    # -----------------------------------------
+    # --------------------------------------------------
     # Page title
-    # -----------------------------------------
+    # --------------------------------------------------
     st.title("EmoLLM V3.0 Mental Health Counseling")
 
-    # -----------------------------------------
-    # Generation configuration / sidebar
-    # -----------------------------------------
+    # --------------------------------------------------
+    # Generation settings
+    # --------------------------------------------------
     generation_config = prepare_generation_config()
 
-    # -----------------------------------------
+    # --------------------------------------------------
     # Initialize chat history
-    # -----------------------------------------
+    # --------------------------------------------------
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # -----------------------------------------
+    # --------------------------------------------------
     # Display previous conversation
-    # -----------------------------------------
+    # --------------------------------------------------
     for message in st.session_state.messages:
 
         with st.chat_message(
@@ -662,125 +664,95 @@ def main():
         ):
             st.markdown(message["content"])
 
-    # -----------------------------------------
-    # User input
-    # -----------------------------------------
-    if prompt := st.chat_input(
+    # --------------------------------------------------
+    # Get new user input
+    # --------------------------------------------------
+    prompt = st.chat_input(
         "I'm here and ready to listen. Tell me what's on your mind..."
-    ):
+    )
 
-        # -------------------------------------
-        # Display user message
-        # -------------------------------------
+    if prompt:
+
+        # --------------------------------------------------
+        # 1. Display current user message
+        # --------------------------------------------------
         with st.chat_message(
             "user",
             avatar=user_avator
         ):
             st.markdown(prompt)
 
-        # -------------------------------------
-        # Save user message
-        # -------------------------------------
+        # --------------------------------------------------
+        # 2. IMPORTANT:
+        # Build prompt BEFORE adding current message
+        # to session history.
+        #
+        # combine_history() itself adds the current prompt.
+        # Therefore, adding it here first would duplicate it.
+        # --------------------------------------------------
+        real_prompt = combine_history(
+            prompt,
+            tokenizer
+        )
+
+        # --------------------------------------------------
+        # 3. Save current user message to history
+        # --------------------------------------------------
         st.session_state.messages.append({
             "role": "user",
             "content": prompt,
             "avatar": user_avator
         })
 
-        # -------------------------------------
-        # SELF-HARM SAFETY CHECK
-        # -------------------------------------
-        if is_self_harm_message(prompt):
+        # --------------------------------------------------
+        # 4. Generate assistant response
+        # --------------------------------------------------
+        with st.chat_message(
+            "robot",
+            avatar=robot_avator
+        ):
 
-            safety_response = get_safety_response()
+            message_placeholder = st.empty()
 
-            # Display safety response
-            with st.chat_message(
-                "robot",
-                avatar=robot_avator
+            cur_response = ""
+
+            # --------------------------------------------------
+            # Generate response token by token
+            # --------------------------------------------------
+            for response in generate_interactive(
+                model=model,
+                tokenizer=tokenizer,
+                prompt=real_prompt,
+                additional_eos_token_id=92542,
+                **asdict(generation_config),
             ):
-                st.markdown(safety_response)
 
-            # Save safety response
-            st.session_state.messages.append({
-                "role": "robot",
-                "content": safety_response,
-                "avatar": robot_avator
-            })
+                cur_response = response
 
-        # -------------------------------------
-        # NORMAL MODEL GENERATION
-        # -------------------------------------
-        else:
+                # Display streaming response
+                message_placeholder.markdown(
+                    cur_response + "▌"
+                )
 
-            # Build complete conversation prompt
-            real_prompt = combine_history(
-                prompt,
-                tokenizer
+            # --------------------------------------------------
+            # Display final response
+            # --------------------------------------------------
+            message_placeholder.markdown(
+                cur_response
             )
 
-            print("\n===== GENERATED PROMPT =====")
-            print(real_prompt)
-            print("============================\n")
+        # --------------------------------------------------
+        # 5. Save assistant response to history
+        # --------------------------------------------------
+        st.session_state.messages.append({
+            "role": "robot",
+            "content": cur_response,
+            "avatar": robot_avator,
+        })
 
-            # ---------------------------------
-            # Generate model response
-            # ---------------------------------
-            with st.chat_message(
-                "robot",
-                avatar=robot_avator
-            ):
-
-                message_placeholder = st.empty()
-
-                cur_response = ""
-
-                for response in generate_interactive(
-                    model=model,
-                    tokenizer=tokenizer,
-                    prompt=real_prompt,
-                    additional_eos_token_id=92542,
-                    **asdict(generation_config),
-                ):
-
-                    cur_response = response
-
-                    message_placeholder.markdown(
-                        cur_response + "▌"
-                    )
-
-                # ---------------------------------
-                # Final response
-                # ---------------------------------
-                if cur_response.strip():
-
-                    message_placeholder.markdown(
-                        cur_response
-                    )
-
-                else:
-
-                    cur_response = (
-                        "I'm sorry, I wasn't able to generate "
-                        "a response. Could you please try again?"
-                    )
-
-                    message_placeholder.markdown(
-                        cur_response
-                    )
-
-            # ---------------------------------
-            # Save model response
-            # ---------------------------------
-            st.session_state.messages.append({
-                "role": "robot",
-                "content": cur_response,
-                "avatar": robot_avator
-            })
-
-        # -------------------------------------
-        # Clear unused CUDA memory
-        # -------------------------------------
+        # --------------------------------------------------
+        # 6. Clear CUDA cache
+        # --------------------------------------------------
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
