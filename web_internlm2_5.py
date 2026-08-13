@@ -561,13 +561,9 @@ Always respond naturally as the assistant.
 
     return total_prompt
 def is_self_harm_message(text):
-    """
-    Detect explicit self-harm / suicide-related messages.
-    This is intentionally conservative and only handles clear phrases.
-    """
-    text = text.lower().strip()
+    text = text.lower()
 
-    safety_keywords = [
+    self_harm_keywords = [
         "hurt myself",
         "hurting myself",
         "harm myself",
@@ -577,252 +573,191 @@ def is_self_harm_message(text):
         "suicide",
         "suicidal",
         "end my life",
-        "ending my life",
         "take my own life",
-        "take my life",
         "want to die",
-        "wanna die",
         "don't want to live",
-        "dont want to live",
-        "not worth living",
-        "self harm",
-        "self-harm",
-        "selfharm",
+        "dont want to live"
     ]
 
-    return any(keyword in text for keyword in safety_keywords)
+    return any(keyword in text for keyword in self_harm_keywords)
 
 def get_safety_response():
     return (
-        "I'm really sorry you're going through this. "
-        "I'm glad you told me. You don't have to face this moment alone.\n\n"
-        "Are you in immediate danger of hurting yourself, or have you "
-        "already hurt yourself?\n\n"
-        "If you think you might hurt yourself soon, please move away from "
+        "I'm really sorry that you're going through this. "
+        "I'm glad you told me. Your safety is important right now.\n\n"
+        "If you feel you might hurt yourself, please move away from "
         "anything you could use to hurt yourself and stay with someone "
-        "you trust. Please contact local emergency services or a qualified "
-        "mental-health professional for immediate support."
+        "you trust. Please contact a mental-health professional or "
+        "emergency service in your area if you might act on these thoughts.\n\n"
+        "If possible, tell someone you trust exactly what you're "
+        "experiencing so they can stay with you.\n\n"
+        "Are you in immediate danger of hurting yourself right now, "
+        "or have you already hurt yourself?"
     )
 def main():
 
     print("load model begin.")
 
-    # --------------------------------------------------
-    # Load model
-    # --------------------------------------------------
+    # Load model and tokenizer
     model, tokenizer = load_model()
 
     print("load model end.")
 
-    # --------------------------------------------------
-    # Avatars
-    # --------------------------------------------------
-    user_avatar = USER_AVATAR
-    robot_avatar = ROBOT_AVATAR
+    # -----------------------------------------
+    # Avatar paths
+    # -----------------------------------------
+    user_avator = USER_AVATAR
+    robot_avator = ROBOT_AVATAR
 
-    # --------------------------------------------------
+    # -----------------------------------------
     # Page title
-    # --------------------------------------------------
-    st.title(
-        "EmoLLM V3.0 Mental Health Counseling"
-    )
+    # -----------------------------------------
+    st.title("EmoLLM V3.0 Mental Health Counseling")
 
-    # --------------------------------------------------
-    # Generation settings
-    # --------------------------------------------------
+    # -----------------------------------------
+    # Generation configuration / sidebar
+    # -----------------------------------------
     generation_config = prepare_generation_config()
 
-    # --------------------------------------------------
-    # Initialize conversation history
-    # --------------------------------------------------
+    # -----------------------------------------
+    # Initialize chat history
+    # -----------------------------------------
     if "messages" not in st.session_state:
-
         st.session_state.messages = []
 
-    # --------------------------------------------------
-    # Display previous messages
-    # --------------------------------------------------
+    # -----------------------------------------
+    # Display previous conversation
+    # -----------------------------------------
     for message in st.session_state.messages:
 
         with st.chat_message(
             message["role"],
             avatar=message.get("avatar")
         ):
+            st.markdown(message["content"])
 
-            st.markdown(
-                message["content"]
-            )
-
-    # --------------------------------------------------
+    # -----------------------------------------
     # User input
-    # --------------------------------------------------
+    # -----------------------------------------
     if prompt := st.chat_input(
         "I'm here and ready to listen. Tell me what's on your mind..."
     ):
 
-        # --------------------------------------------------
+        # -------------------------------------
         # Display user message
-        # --------------------------------------------------
+        # -------------------------------------
         with st.chat_message(
             "user",
-            avatar=user_avatar
+            avatar=user_avator
         ):
-
             st.markdown(prompt)
 
-        # --------------------------------------------------
+        # -------------------------------------
         # Save user message
-        # --------------------------------------------------
+        # -------------------------------------
         st.session_state.messages.append({
             "role": "user",
             "content": prompt,
-            "avatar": user_avatar
+            "avatar": user_avator
         })
 
-        # --------------------------------------------------
-        # Self-harm detection
-        # --------------------------------------------------
-        self_harm_keywords = [
+        # -------------------------------------
+        # SELF-HARM SAFETY CHECK
+        # -------------------------------------
+        if is_self_harm_message(prompt):
 
-            "kill myself",
-            "killing myself",
+            safety_response = get_safety_response()
 
-            "suicide",
-            "suicidal",
+            # Display safety response
+            with st.chat_message(
+                "robot",
+                avatar=robot_avator
+            ):
+                st.markdown(safety_response)
 
-            "hurt myself",
-            "hurting myself",
+            # Save safety response
+            st.session_state.messages.append({
+                "role": "robot",
+                "content": safety_response,
+                "avatar": robot_avator
+            })
 
-            "harm myself",
-            "harming myself",
+        # -------------------------------------
+        # NORMAL MODEL GENERATION
+        # -------------------------------------
+        else:
 
-            "self harm",
-            "self-harm",
+            # Build complete conversation prompt
+            real_prompt = combine_history(
+                prompt,
+                tokenizer
+            )
 
-            "want to die",
-            "wants to die",
+            print("\n===== GENERATED PROMPT =====")
+            print(real_prompt)
+            print("============================\n")
 
-            "wish I was dead",
-            "wish i was dead",
+            # ---------------------------------
+            # Generate model response
+            # ---------------------------------
+            with st.chat_message(
+                "robot",
+                avatar=robot_avator
+            ):
 
-            "don't want to live",
-            "dont want to live",
-
-            "do not want to live",
-
-            "end my life",
-            "ending my life"
-        ]
-
-        prompt_lower = prompt.lower()
-
-        is_self_harm = any(
-            keyword in prompt_lower
-            for keyword in self_harm_keywords
-        )
-
-        # --------------------------------------------------
-        # Build prompt
-        # --------------------------------------------------
-        real_prompt = combine_history(
-            prompt,
-            tokenizer
-        )
-
-        # --------------------------------------------------
-        # Generate assistant response
-        # --------------------------------------------------
-        with st.chat_message(
-            "robot",
-            avatar=robot_avatar
-        ):
-
-            message_placeholder = st.empty()
-
-            # ==================================================
-            # SAFETY RESPONSE
-            # ==================================================
-            if is_self_harm:
-
-                cur_response = (
-                    "I'm really sorry that you're going through "
-                    "this. I'm glad you told me. Your safety is "
-                    "important right now.\n\n"
-                    "If you feel you might hurt yourself, please "
-                    "move away from anything you could use to hurt "
-                    "yourself and stay with someone you trust. "
-                    "Please contact a mental-health professional "
-                    "or emergency service in your area if you "
-                    "might act on these thoughts.\n\n"
-                    "If possible, tell someone you trust exactly "
-                    "what you're experiencing so they can stay "
-                    "with you.\n\n"
-                    "Are you in immediate danger of hurting "
-                    "yourself right now, or have you already "
-                    "hurt yourself?"
-                )
-
-                message_placeholder.markdown(
-                    cur_response
-                )
-
-            # ==================================================
-            # NORMAL MODEL RESPONSE
-            # ==================================================
-            else:
+                message_placeholder = st.empty()
 
                 cur_response = ""
 
-                try:
+                for response in generate_interactive(
+                    model=model,
+                    tokenizer=tokenizer,
+                    prompt=real_prompt,
+                    additional_eos_token_id=92542,
+                    **asdict(generation_config),
+                ):
 
-                    for cur_response in generate_interactive(
-                        model=model,
-                        tokenizer=tokenizer,
-                        prompt=real_prompt,
-                        additional_eos_token_id=92542,
-                        **asdict(generation_config),
-                    ):
+                    cur_response = response
 
-                        message_placeholder.markdown(
-                            cur_response + "▌"
-                        )
+                    message_placeholder.markdown(
+                        cur_response + "▌"
+                    )
+
+                # ---------------------------------
+                # Final response
+                # ---------------------------------
+                if cur_response.strip():
 
                     message_placeholder.markdown(
                         cur_response
                     )
 
-                except Exception as e:
-
-                    print(
-                        "Generation error:",
-                        repr(e)
-                    )
+                else:
 
                     cur_response = (
-                        "I'm sorry, but I encountered an "
-                        "error while generating a response. "
-                        "Please try again."
+                        "I'm sorry, I wasn't able to generate "
+                        "a response. Could you please try again?"
                     )
 
-                    message_placeholder.error(
-                        f"Generation error: {e}"
+                    message_placeholder.markdown(
+                        cur_response
                     )
 
-        # --------------------------------------------------
-        # Save assistant response
-        # --------------------------------------------------
-        st.session_state.messages.append({
-            "role": "robot",
-            "content": cur_response,
-            "avatar": robot_avatar
-        })
+            # ---------------------------------
+            # Save model response
+            # ---------------------------------
+            st.session_state.messages.append({
+                "role": "robot",
+                "content": cur_response,
+                "avatar": robot_avator
+            })
 
-        # --------------------------------------------------
-        # Clear CUDA cache
-        # --------------------------------------------------
+        # -------------------------------------
+        # Clear unused CUDA memory
+        # -------------------------------------
         if torch.cuda.is_available():
-
             torch.cuda.empty_cache()
+
 
 if __name__ == "__main__":
     main()
