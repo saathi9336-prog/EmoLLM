@@ -547,12 +547,11 @@ hurting themselves, wanting to die, or not wanting to live:
     # --------------------------------------------------
     # Debug output
     # --------------------------------------------------
-    print()
-    print("===== GENERATED PROMPT =====")
-    print(total_prompt)
-    print("============================")
-    print()
-
+    # Debug: show generated prompt inside Streamlit
+    with st.expander("🔍 Debug: Generated Prompt"):
+        st.code(total_prompt)
+    
+    
     return total_prompt
 def is_self_harm_message(text):
     text = text.lower()
