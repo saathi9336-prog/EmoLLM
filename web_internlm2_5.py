@@ -434,6 +434,11 @@ Your role is to:
 - provide practical and supportive suggestions
 - never judge, shame, or criticize the user
 - never claim to provide a definitive medical diagnosis
+- never repeat the user's message as your response
+- always respond naturally as the assistant
+
+For ordinary emotional concerns, provide supportive,
+empathetic and practical responses.
 
 IMPORTANT SAFETY RULE:
 
@@ -451,56 +456,49 @@ hurting themselves, wanting to die, or not wanting to live:
   or emergency service if they may act on these thoughts.
 - Ask whether they are in immediate danger or have already
   hurt themselves.
-
-For ordinary emotional concerns, provide supportive,
-empathetic and practical responses.
-
-Never repeat the user's message as your response.
-
-Always respond naturally as the assistant.
 """
 
     # --------------------------------------------------
-    # Conversation messages
+    # Build conversation messages
     # --------------------------------------------------
-    messages = []
-
-    messages.append({
-        "role": "system",
-        "content": system_prompt.strip()
-    })
+    messages = [
+        {
+            "role": "system",
+            "content": system_prompt.strip()
+        }
+    ]
 
     # --------------------------------------------------
-    # Previous conversation
+    # Add previous conversation
+    #
+    # IMPORTANT:
+    # The current user message has already been added to
+    # st.session_state.messages by main().
+    # Therefore we DO NOT append prompt separately.
     # --------------------------------------------------
     if "messages" in st.session_state:
 
         for message in st.session_state.messages:
 
-            if message["role"] == "user":
+            role = message["role"]
+            content = message["content"]
+
+            if role == "user":
 
                 messages.append({
                     "role": "user",
-                    "content": message["content"]
+                    "content": content
                 })
 
-            elif message["role"] == "robot":
+            elif role == "robot":
 
                 messages.append({
                     "role": "assistant",
-                    "content": message["content"]
+                    "content": content
                 })
 
     # --------------------------------------------------
-    # Current user message
-    # --------------------------------------------------
-    messages.append({
-        "role": "user",
-        "content": prompt
-    })
-
-    # --------------------------------------------------
-    # Use InternLM's chat template
+    # Use InternLM2.5 chat template
     # --------------------------------------------------
     try:
 
@@ -512,10 +510,7 @@ Always respond naturally as the assistant.
 
     except Exception as e:
 
-        print(
-            "WARNING: tokenizer chat template failed:"
-        )
-
+        print("WARNING: tokenizer chat template failed:")
         print(e)
 
         # --------------------------------------------------
@@ -546,9 +541,8 @@ Always respond naturally as the assistant.
                     + "<|im_end|>\n"
                 )
 
-        total_prompt += (
-            "<|im_start|>assistant\n"
-        )
+        # Tell the model that the next message is its response
+        total_prompt += "<|im_start|>assistant\n"
 
     # --------------------------------------------------
     # Debug output
