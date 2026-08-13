@@ -420,64 +420,170 @@ Never generate a response that pretends to be the user's message.
     print("===== END PROMPT =====\n")
 
     return total_prompt
-def main():
-    # st.markdown("我在这里，准备好倾听你的心声了。", unsafe_allow_html=True)
-    # torch.cuda.empty_cache()
-    print('load model begin.')
-    model, tokenizer = load_model()
-    print('load model end.')
 
-    user_avator = USER_AVATAR
-    robot_avator = ROBOT_AVATAR
+
+
+
+def is_self_harm_message(text):
+    """
+    Detect explicit self-harm / suicide-related messages.
+    This is intentionally conservative and only handles clear phrases.
+    """
+    text = text.lower().strip()
+
+    safety_keywords = [
+        "hurt myself",
+        "hurting myself",
+        "harm myself",
+        "harming myself",
+        "kill myself",
+        "killing myself",
+        "suicide",
+        "suicidal",
+        "end my life",
+        "ending my life",
+        "take my own life",
+        "take my life",
+        "want to die",
+        "wanna die",
+        "don't want to live",
+        "dont want to live",
+        "not worth living",
+        "self harm",
+        "self-harm",
+        "selfharm",
+    ]
+
+    return any(keyword in text for keyword in safety_keywords)
+
+def get_safety_response():
+    return (
+        "I'm really sorry you're going through this. "
+        "I'm glad you told me. You don't have to face this moment alone.\n\n"
+        "Are you in immediate danger of hurting yourself, or have you "
+        "already hurt yourself?\n\n"
+        "If you think you might hurt yourself soon, please move away from "
+        "anything you could use to hurt yourself and stay with someone "
+        "you trust. Please contact local emergency services or a qualified "
+        "mental-health professional for immediate support."
+    )
+def main():
+    print("load model begin.")
+
+    model, tokenizer = load_model()
+
+    print("load model end.")
+
+    user_avatar = USER_AVATAR
+    robot_avatar = ROBOT_AVATAR
 
     st.title("EmoLLM V3.0 Mental Health Counseling")
 
     generation_config = prepare_generation_config()
 
     # Initialize chat history
-    if 'messages' not in st.session_state:
+    if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # Display chat messages from history on app rerun
+    # Display previous messages
     for message in st.session_state.messages:
-        with st.chat_message(message['role'], avatar=message.get('avatar')):
-            st.markdown(message['content'])
+        with st.chat_message(
+            message["role"],
+            avatar=message.get("avatar")
+        ):
+            st.markdown(message["content"])
 
-    # Accept user input
+    # User input
     if prompt := st.chat_input(
         "I'm here and ready to listen. Tell me what's on your mind..."
     ):
-        # Display user message in chat message container
-        with st.chat_message('user', avatar=user_avator):
+
+        # --------------------------------------------------
+        # 1. Display user's message
+        # --------------------------------------------------
+        with st.chat_message(
+            "user",
+            avatar=user_avatar
+        ):
             st.markdown(prompt)
-        real_prompt = combine_history(prompt, tokenizer)
-        # Add user message to chat history
+
+        # --------------------------------------------------
+        # 2. Save user message BEFORE generating response
+        # --------------------------------------------------
         st.session_state.messages.append({
-            'role': 'user',
-            'content': prompt,
-            'avatar': user_avator
+            "role": "user",
+            "content": prompt,
+            "avatar": user_avatar
         })
 
-        with st.chat_message('robot', avatar=robot_avator):
+        # --------------------------------------------------
+        # 3. Build complete conversation prompt
+        # --------------------------------------------------
+        real_prompt = combine_history(
+            prompt,
+            tokenizer
+        )
+
+        # Debugging
+        print("\n===== GENERATED PROMPT =====")
+        print(real_prompt)
+        print("============================\n")
+
+        # --------------------------------------------------
+        # 4. Generate model response
+        # --------------------------------------------------
+        with st.chat_message(
+            "robot",
+            avatar=robot_avatar
+        ):
+
             message_placeholder = st.empty()
-            for cur_response in generate_interactive(
+
+            cur_response = ""
+
+            try:
+
+                for cur_response in generate_interactive(
                     model=model,
                     tokenizer=tokenizer,
                     prompt=real_prompt,
                     additional_eos_token_id=92542,
                     **asdict(generation_config),
-            ):
-                # Display robot response in chat message container
-                message_placeholder.markdown(cur_response + '▌')
-            message_placeholder.markdown(cur_response)
-        # Add robot response to chat history
+                ):
+
+                    message_placeholder.markdown(
+                        cur_response + "▌"
+                    )
+
+                # Final response
+                message_placeholder.markdown(cur_response)
+
+            except Exception as e:
+
+                cur_response = (
+                    "I'm sorry, but I encountered an error while "
+                    "generating a response. Please try again."
+                )
+
+                message_placeholder.error(
+                    f"Generation error: {e}"
+                )
+
+        # --------------------------------------------------
+        # 5. Save assistant response
+        # --------------------------------------------------
         st.session_state.messages.append({
-            'role': 'robot',
-            'content': cur_response,  # pylint: disable=undefined-loop-variable
-            'avatar': robot_avator,
+            "role": "robot",
+            "content": cur_response,
+            "avatar": robot_avatar
         })
-        torch.cuda.empty_cache()
+
+        # --------------------------------------------------
+        # 6. Free unused CUDA memory
+        # --------------------------------------------------
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
