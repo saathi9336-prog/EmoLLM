@@ -448,6 +448,32 @@ provided to you in the current prompt.
 Never invent, assume, or fabricate previous conversations,
 events, people, concerns, or user statements.
 
+When answering questions about previous conversation:
+
+- State only information that the user explicitly provided.
+- Do not turn assumptions or likely explanations into facts.
+- Do not infer specific fears, causes, intentions, or beliefs
+  unless the user explicitly stated them.
+- Do not add details that were not explicitly mentioned by
+  the user.
+- If the user says "I am worried about my mathematics exam",
+  do not assume they are worried about failing unless they
+  explicitly say they are worried about failing.
+
+For example:
+
+User:
+"I am worried about my mathematics exam."
+
+If the user asks:
+"What am I worried about?"
+
+Respond with:
+"You told me that you are worried about your mathematics exam."
+
+Do NOT respond with:
+"You are worried that you will fail the mathematics exam."
+
 If the user asks:
 
 - "What was I worried about earlier?"
@@ -493,7 +519,9 @@ or suicidal thoughts.
     # --------------------------------------------------
     messages = []
 
-    # System message
+    # --------------------------------------------------
+    # Add system message
+    # --------------------------------------------------
     messages.append({
         "role": "system",
         "content": system_prompt.strip()
@@ -506,6 +534,9 @@ or suicidal thoughts.
 
         for message in st.session_state.messages:
 
+            # ------------------------------------------
+            # User message
+            # ------------------------------------------
             if message["role"] == "user":
 
                 messages.append({
@@ -513,6 +544,9 @@ or suicidal thoughts.
                     "content": message["content"]
                 })
 
+            # ------------------------------------------
+            # Assistant message
+            # ------------------------------------------
             elif message["role"] == "robot":
 
                 messages.append({
@@ -522,6 +556,13 @@ or suicidal thoughts.
 
     # --------------------------------------------------
     # Add current user message
+    #
+    # IMPORTANT:
+    # This is added here BEFORE it is stored in
+    # st.session_state.messages by main().
+    #
+    # This prevents the current message from appearing
+    # twice in the generated prompt.
     # --------------------------------------------------
     messages.append({
         "role": "user",
@@ -529,7 +570,7 @@ or suicidal thoughts.
     })
 
     # --------------------------------------------------
-    # Generate InternLM chat prompt
+    # Generate prompt using InternLM chat template
     # --------------------------------------------------
     try:
 
@@ -554,7 +595,9 @@ or suicidal thoughts.
             + "<|im_end|>\n"
         )
 
-        # Add conversation history
+        # --------------------------------------------------
+        # Add conversation messages
+        # --------------------------------------------------
         for message in messages[1:]:
 
             if message["role"] == "user":
@@ -573,18 +616,25 @@ or suicidal thoughts.
                     + "<|im_end|>\n"
                 )
 
-        # Generation prompt
+        # --------------------------------------------------
+        # Add assistant generation prompt
+        # --------------------------------------------------
         total_prompt += (
             "<|im_start|>assistant\n"
         )
 
     # --------------------------------------------------
-    # TEMPORARY DEBUG
-    # Remove this after testing
+    # Temporary debugging
+    #
+    # Keep this for testing.
+    # We can remove it after all tests pass.
     # --------------------------------------------------
     with st.expander("🔍 Debug: Generated Prompt"):
         st.code(total_prompt)
 
+    # --------------------------------------------------
+    # Return final prompt
+    # --------------------------------------------------
     return total_prompt
 def is_self_harm_message(text):
     text = text.lower()
