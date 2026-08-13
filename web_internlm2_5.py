@@ -424,9 +424,9 @@ cur_query_prompt = (
 
 def combine_history(prompt, tokenizer):
 
-    # --------------------------------------------------
-    # System instruction
-    # --------------------------------------------------
+    # ==================================================
+    # SYSTEM PROMPT
+    # ==================================================
 
     system_prompt = """
 You are EmoLLM, a professional and supportive mental health
@@ -443,42 +443,39 @@ Your role is to:
 - provide practical and supportive suggestions
 - never judge, shame, or criticize the user
 - never claim to provide a definitive medical diagnosis
-- never repeat the user's message as your response
-- always respond naturally as the assistant
-
-For ordinary emotional concerns, provide supportive,
-empathetic and practical responses.
+- never invent facts about the user
+- never invent previous conversations
+- never invent people, events, problems, symptoms, or experiences
+- only use information explicitly provided in the conversation
 
 IMPORTANT CONVERSATION MEMORY RULE:
 
-Only use information contained in the conversation messages
-provided to you in the current prompt.
+The conversation history provided below is the only source
+of information about what the user previously said.
 
-When answering questions about previous conversation:
+When referring to previous conversation:
 
-- State only information that the user explicitly provided.
-- Do not turn assumptions or likely explanations into facts.
-- Do not infer specific fears, causes, intentions, or beliefs
-  unless the user explicitly stated them.
-- Do not add details that were not explicitly mentioned.
+- use only explicitly stated information
+- do not infer unstated causes
+- do not invent specific problems
+- do not invent examples
+- do not invent events
+- do not invent people
+- do not turn assumptions into facts
 
 For example:
 
-User:
-"I am worried about my mathematics exam."
+If the user says:
+"I keep getting stuck on new mathematics problems."
 
-If the user asks:
-"What am I worried about?"
+You may say:
+"You told me that you keep getting stuck on new mathematics problems."
 
-Respond with:
-"You told me that you are worried about your mathematics exam."
+You must NOT say:
+"You were having trouble with a spaceship and planet problem."
 
-Do NOT respond with:
-"You are worried that you will fail the mathematics exam."
-
-If the user asks about something that is not present in the
-conversation provided to you, clearly say that you do not have
-that information available in the current conversation.
+If the requested information is not present in the conversation,
+say that the information is not available.
 
 IMPORTANT SAFETY RULE:
 
@@ -486,74 +483,88 @@ If the user explicitly expresses thoughts about suicide,
 self-harm, hurting themselves, wanting to die, or not wanting
 to live:
 
-- Take the statement seriously.
-- Respond with empathy and concern.
-- Do not ask the user to justify why they feel this way.
-- Do not provide instructions or methods for self-harm.
-- Encourage the person to move away from anything they could
-  use to hurt themselves.
-- Encourage the person to stay with a trusted person.
-- Encourage them to contact a mental-health professional
-  or emergency service if they may act on these thoughts.
-- Ask whether they are in immediate danger or have already
-  hurt themselves.
+- take the statement seriously
+- respond with empathy and concern
+- do not ask them to justify why they feel this way
+- do not provide instructions or methods for self-harm
+- encourage them to move away from anything they could use
+  to hurt themselves
+- encourage them to stay with a trusted person
+- encourage them to contact appropriate professional or
+  emergency support if they may act on these thoughts
+- ask whether they are in immediate danger or have already
+  hurt themselves
 
-Never minimize, dismiss, or judge expressions of self-harm
-or suicidal thoughts.
+Do not trigger the safety response for ordinary stress,
+exam anxiety, loneliness, sadness, frustration, or other
+emotional concerns unless the user explicitly expresses
+self-harm or suicidal thoughts.
+
+Always respond naturally as the assistant.
 """
 
-    # --------------------------------------------------
-    # Create conversation
-    # --------------------------------------------------
+    # ==================================================
+    # CREATE MESSAGE LIST
+    # ==================================================
 
     messages = []
 
-    # System message
     messages.append({
         "role": "system",
         "content": system_prompt.strip()
     })
 
-    # --------------------------------------------------
-    # Add previous conversation
-    # --------------------------------------------------
+    # ==================================================
+    # ADD PREVIOUS CONVERSATION
+    # ==================================================
 
-    if "messages" in st.session_state:
+    history = st.session_state.get(
+        "messages",
+        []
+    )
 
-        for message in st.session_state.messages:
+    for message in history:
 
-            role = message.get("role")
-            content = message.get("content", "").strip()
+        role = message.get("role")
+        content = message.get("content", "").strip()
 
-            if not content:
-                continue
+        if not content:
+            continue
 
-            if role == "user":
+        # ----------------------------------------------
+        # User
+        # ----------------------------------------------
 
-                messages.append({
-                    "role": "user",
-                    "content": content
-                })
+        if role == "user":
 
-            elif role == "robot":
+            messages.append({
+                "role": "user",
+                "content": content
+            })
 
-                messages.append({
-                    "role": "assistant",
-                    "content": content
-                })
+        # ----------------------------------------------
+        # Assistant
+        # ----------------------------------------------
 
-    # --------------------------------------------------
-    # Add current user message
-    # --------------------------------------------------
+        elif role == "robot":
+
+            messages.append({
+                "role": "assistant",
+                "content": content
+            })
+
+    # ==================================================
+    # ADD CURRENT USER MESSAGE
+    # ==================================================
 
     messages.append({
         "role": "user",
-        "content": prompt.strip()
+        "content": prompt
     })
 
-    # --------------------------------------------------
-    # Convert conversation using InternLM chat template
-    # --------------------------------------------------
+    # ==================================================
+    # APPLY INTERNLM CHAT TEMPLATE
+    # ==================================================
 
     try:
 
@@ -565,12 +576,15 @@ or suicidal thoughts.
 
     except Exception as e:
 
-        print("WARNING: tokenizer chat template failed:")
+        print(
+            "WARNING: tokenizer chat template failed:"
+        )
+
         print(e)
 
-        # --------------------------------------------------
-        # Fallback InternLM format
-        # --------------------------------------------------
+        # ==================================================
+        # FALLBACK FORMAT
+        # ==================================================
 
         total_prompt = (
             "<s>"
@@ -581,22 +595,29 @@ or suicidal thoughts.
 
         for message in messages[1:]:
 
-            role = message["role"]
-            content = message["content"]
+            if message["role"] == "user":
 
-            total_prompt += (
-                "<|im_start|>"
-                + role
-                + "\n"
-                + content
-                + "<|im_end|>\n"
-            )
+                total_prompt += (
+                    "<|im_start|>user\n"
+                    + message["content"]
+                    + "<|im_end|>\n"
+                )
 
-        total_prompt += "<|im_start|>assistant\n"
+            elif message["role"] == "assistant":
 
-    # --------------------------------------------------
-    # Debug
-    # --------------------------------------------------
+                total_prompt += (
+                    "<|im_start|>assistant\n"
+                    + message["content"]
+                    + "<|im_end|>\n"
+                )
+
+        total_prompt += (
+            "<|im_start|>assistant\n"
+        )
+
+    # ==================================================
+    # DEBUG
+    # ==================================================
 
     print()
     print("===== GENERATED PROMPT =====")
@@ -675,6 +696,159 @@ def get_safety_response():
         "Are you in immediate danger of hurting yourself right now, "
         "or have you already hurt yourself?"
     )
+def answer_memory_question(prompt):
+    """
+    Answer simple conversation-memory questions using only
+    information explicitly stored in st.session_state.messages.
+
+    Returns:
+        str | None
+        A deterministic answer if the prompt is a memory question,
+        otherwise None.
+    """
+
+    prompt_lower = prompt.lower().strip()
+
+    memory_questions = [
+        "what was i worried about earlier",
+        "what was i worried about",
+        "what am i worried about",
+        "what did i say earlier",
+        "what did i tell you earlier",
+        "what did i tell you",
+        "what did i mention earlier",
+        "what did i mention",
+        "what was i talking about earlier",
+        "what was i talking about",
+        "what problem was i having earlier",
+        "what problem was i having",
+        "what problem am i having",
+        "what was my problem earlier",
+        "do you remember what i said",
+        "do you remember what i told you",
+        "do you remember what i mentioned",
+    ]
+
+    # --------------------------------------------------
+    # Check whether this is a memory question
+    # --------------------------------------------------
+
+    is_memory_question = any(
+        question in prompt_lower
+        for question in memory_questions
+    )
+
+    if not is_memory_question:
+        return None
+
+    # --------------------------------------------------
+    # Get conversation history
+    # --------------------------------------------------
+
+    messages = st.session_state.get("messages", [])
+
+    if not messages:
+        return (
+            "I don't have that information available "
+            "in the current conversation."
+        )
+
+    # --------------------------------------------------
+    # Collect explicit user statements
+    # --------------------------------------------------
+
+    user_messages = []
+
+    for message in messages:
+
+        if message.get("role") != "user":
+            continue
+
+        content = message.get("content", "").strip()
+
+        if not content:
+            continue
+
+        user_messages.append(content)
+
+    # --------------------------------------------------
+    # Nothing available
+    # --------------------------------------------------
+
+    if not user_messages:
+        return (
+            "I don't have that information available "
+            "in the current conversation."
+        )
+
+    # --------------------------------------------------
+    # Specific memory question:
+    # "What problem am I having?"
+    # --------------------------------------------------
+
+    if (
+        "what problem" in prompt_lower
+        or "what was my problem" in prompt_lower
+    ):
+
+        mathematics_statements = []
+
+        for message in user_messages:
+
+            text = message.lower()
+
+            if (
+                "mathematics" in text
+                or "math" in text
+                or "mathematical" in text
+            ):
+                mathematics_statements.append(message)
+
+        # ----------------------------------------------
+        # Explicit mathematics statement found
+        # ----------------------------------------------
+
+        if mathematics_statements:
+
+            return (
+                "You told me that "
+                + mathematics_statements[-1]
+            )
+
+    # --------------------------------------------------
+    # "What am I worried about?"
+    # --------------------------------------------------
+
+    if "worried" in prompt_lower:
+
+        worried_statements = []
+
+        for message in user_messages:
+
+            text = message.lower()
+
+            if "worried" in text or "worry" in text:
+
+                worried_statements.append(message)
+
+        if worried_statements:
+
+            return (
+                "You told me that "
+                + worried_statements[-1]
+            )
+
+    # --------------------------------------------------
+    # General memory question
+    # --------------------------------------------------
+
+    # Return the most recent explicit user statement
+    # rather than inventing information.
+
+    return (
+        "Earlier, you told me: "
+        + user_messages[-1]
+    )
 def main():
 
     # ==================================================
@@ -721,21 +895,23 @@ def main():
 
     for message in st.session_state.messages:
 
-        role = message["role"]
-        content = message["content"]
+        role = message.get("role")
+        content = message.get("content", "")
         avatar = message.get("avatar")
 
-        # Streamlit uses "user" and "assistant"
-        display_role = (
-            "assistant"
-            if role == "robot"
-            else "user"
-        )
+        # Convert internal "robot" role to Streamlit
+        # "assistant" role
+
+        if role == "robot":
+            display_role = "assistant"
+        else:
+            display_role = "user"
 
         with st.chat_message(
             display_role,
             avatar=avatar
         ):
+
             st.markdown(content)
 
     # ==================================================
@@ -757,11 +933,23 @@ def main():
         "user",
         avatar=user_avator
     ):
+
         st.markdown(prompt)
 
     # ==================================================
     # SAFETY CHECK
     # ==================================================
+
+    # IMPORTANT:
+    #
+    # Safety must be checked BEFORE:
+    #
+    # 1. memory handling
+    # 2. combine_history()
+    # 3. model generation
+    #
+    # Therefore self-harm messages never reach
+    # the language model.
 
     if is_self_harm_message(prompt):
 
@@ -799,8 +987,71 @@ def main():
         })
 
         # --------------------------------------------------
-        # IMPORTANT:
-        # Do not send self-harm message to the model.
+        # Do NOT send safety message to model
+        # --------------------------------------------------
+
+        return
+
+    # ==================================================
+    # MEMORY QUESTION CHECK
+    # ==================================================
+
+    # Examples:
+    #
+    # "What was I worried about earlier?"
+    # "What did I say earlier?"
+    # "What problem am I having?"
+    # "What did I tell you?"
+    #
+    # These questions are answered using the actual
+    # conversation history instead of allowing the
+    # 7B model to invent information.
+
+    memory_response = answer_memory_question(
+        prompt
+    )
+
+    # ==================================================
+    # MEMORY QUESTION FOUND
+    # ==================================================
+
+    if memory_response is not None:
+
+        # --------------------------------------------------
+        # Save current user message
+        # --------------------------------------------------
+
+        st.session_state.messages.append({
+            "role": "user",
+            "content": prompt,
+            "avatar": user_avator
+        })
+
+        # --------------------------------------------------
+        # Display deterministic memory response
+        # --------------------------------------------------
+
+        with st.chat_message(
+            "assistant",
+            avatar=robot_avator
+        ):
+
+            st.markdown(
+                memory_response
+            )
+
+        # --------------------------------------------------
+        # Save memory response
+        # --------------------------------------------------
+
+        st.session_state.messages.append({
+            "role": "robot",
+            "content": memory_response,
+            "avatar": robot_avator
+        })
+
+        # --------------------------------------------------
+        # Do NOT send memory question to model
         # --------------------------------------------------
 
         return
@@ -811,16 +1062,13 @@ def main():
 
     # IMPORTANT:
     #
-    # combine_history() receives:
+    # Build the prompt BEFORE adding the current user
+    # message to st.session_state.messages.
     #
-    #     OLD conversation history
-    #     +
-    #     CURRENT user message
+    # combine_history() itself adds the current prompt.
     #
-    # The current message must NOT be added to
-    # st.session_state.messages before this call.
-    # Otherwise it will appear twice in the prompt.
-    # ==================================================
+    # If we added it first, the current message would
+    # appear twice in the generated prompt.
 
     real_prompt = combine_history(
         prompt,
@@ -838,7 +1086,7 @@ def main():
     })
 
     # ==================================================
-    # GENERATE ASSISTANT RESPONSE
+    # GENERATE MODEL RESPONSE
     # ==================================================
 
     with st.chat_message(
@@ -869,7 +1117,7 @@ def main():
             )
 
         # --------------------------------------------------
-        # Remove cursor
+        # Remove cursor after generation
         # --------------------------------------------------
 
         message_placeholder.markdown(
@@ -891,8 +1139,13 @@ def main():
     # ==================================================
 
     if torch.cuda.is_available():
+
         torch.cuda.empty_cache()
 
+
+# ======================================================
+# START STREAMLIT APPLICATION
+# ======================================================
 
 if __name__ == "__main__":
     main()
