@@ -713,7 +713,6 @@ def main():
     # ==================================================
 
     if "messages" not in st.session_state:
-
         st.session_state.messages = []
 
     # ==================================================
@@ -723,14 +722,10 @@ def main():
     for message in st.session_state.messages:
 
         role = message["role"]
-
         content = message["content"]
-
         avatar = message.get("avatar")
 
-        # Streamlit accepts "user" and "assistant"
-        # as standard chat roles.
-
+        # Streamlit uses "user" and "assistant"
         display_role = (
             "assistant"
             if role == "robot"
@@ -741,7 +736,6 @@ def main():
             display_role,
             avatar=avatar
         ):
-
             st.markdown(content)
 
     # ==================================================
@@ -763,7 +757,6 @@ def main():
         "user",
         avatar=user_avator
     ):
-
         st.markdown(prompt)
 
     # ==================================================
@@ -806,7 +799,8 @@ def main():
         })
 
         # --------------------------------------------------
-        # Do NOT send the self-harm message to the model
+        # IMPORTANT:
+        # Do not send self-harm message to the model.
         # --------------------------------------------------
 
         return
@@ -817,11 +811,16 @@ def main():
 
     # IMPORTANT:
     #
-    # Build the prompt BEFORE adding the current user
-    # message to st.session_state.messages.
+    # combine_history() receives:
     #
-    # combine_history() needs the OLD history + current
-    # prompt exactly once.
+    #     OLD conversation history
+    #     +
+    #     CURRENT user message
+    #
+    # The current message must NOT be added to
+    # st.session_state.messages before this call.
+    # Otherwise it will appear twice in the prompt.
+    # ==================================================
 
     real_prompt = combine_history(
         prompt,
@@ -892,7 +891,6 @@ def main():
     # ==================================================
 
     if torch.cuda.is_available():
-
         torch.cuda.empty_cache()
 
 
