@@ -300,7 +300,7 @@ cur_query_prompt = (
 )
 
 
-def combine_history(prompt):
+def combine_history(prompt, tokenizer=None):
     messages = st.session_state.messages
 
     meta_instruction = """
@@ -321,8 +321,8 @@ GENERAL BEHAVIOR:
 
 SELF-HARM OR SUICIDE SAFETY:
 If the user says they are thinking about hurting themselves,
-suicide, killing themselves, ending their life, or otherwise expresses
-that they may be in danger:
+suicide, killing themselves, ending their life, ending their life,
+or otherwise expresses that they may be in danger:
 
 1. Take the statement seriously.
 2. Respond with empathy and acknowledge their pain.
@@ -352,10 +352,14 @@ and supportively.
         cur_content = message["content"]
 
         if message["role"] == "user":
-            cur_prompt = user_prompt.format(user=cur_content)
+            cur_prompt = user_prompt.format(
+                user=cur_content
+            )
 
         elif message["role"] == "robot":
-            cur_prompt = robot_prompt.format(robot=cur_content)
+            cur_prompt = robot_prompt.format(
+                robot=cur_content
+            )
 
         else:
             raise RuntimeError(
@@ -364,7 +368,9 @@ and supportively.
 
         total_prompt += cur_prompt
 
-    total_prompt += cur_query_prompt.format(user=prompt)
+    total_prompt += cur_query_prompt.format(
+        user=prompt
+    )
 
     return total_prompt
 def main():
