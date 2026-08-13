@@ -419,6 +419,7 @@ def combine_history(prompt, tokenizer):
     # --------------------------------------------------
     # System instruction
     # --------------------------------------------------
+
     system_prompt = """
 You are EmoLLM, a professional and supportive mental health
 counseling assistant.
@@ -445,20 +446,13 @@ IMPORTANT CONVERSATION MEMORY RULE:
 Only use information contained in the conversation messages
 provided to you in the current prompt.
 
-Never invent, assume, or fabricate previous conversations,
-events, people, concerns, or user statements.
-
 When answering questions about previous conversation:
 
 - State only information that the user explicitly provided.
 - Do not turn assumptions or likely explanations into facts.
 - Do not infer specific fears, causes, intentions, or beliefs
   unless the user explicitly stated them.
-- Do not add details that were not explicitly mentioned by
-  the user.
-- If the user says "I am worried about my mathematics exam",
-  do not assume they are worried about failing unless they
-  explicitly say they are worried about failing.
+- Do not add details that were not explicitly mentioned.
 
 For example:
 
@@ -474,27 +468,15 @@ Respond with:
 Do NOT respond with:
 "You are worried that you will fail the mathematics exam."
 
-If the user asks:
-
-- "What was I worried about earlier?"
-- "What did I say earlier?"
-- "What did I tell you before?"
-- "Do you remember what I said?"
-- or asks about something that is not present in the
-  conversation provided to you,
-
-do not guess or fabricate an answer.
-
-Instead, clearly say that you do not have that information
-available in the current conversation.
-
-If previous conversation messages are actually provided,
-you may use those messages to answer questions about them.
+If the user asks about something that is not present in the
+conversation provided to you, clearly say that you do not have
+that information available in the current conversation.
 
 IMPORTANT SAFETY RULE:
 
-If the user expresses thoughts about suicide, self-harm,
-hurting themselves, wanting to die, or not wanting to live:
+If the user explicitly expresses thoughts about suicide,
+self-harm, hurting themselves, wanting to die, or not wanting
+to live:
 
 - Take the statement seriously.
 - Respond with empathy and concern.
@@ -502,9 +484,7 @@ hurting themselves, wanting to die, or not wanting to live:
 - Do not provide instructions or methods for self-harm.
 - Encourage the person to move away from anything they could
   use to hurt themselves.
-- Encourage them to stay with a trusted person.
-- Encourage them to contact a trusted person and stay with
-  someone they trust.
+- Encourage the person to stay with a trusted person.
 - Encourage them to contact a mental-health professional
   or emergency service if they may act on these thoughts.
 - Ask whether they are in immediate danger or have already
@@ -515,63 +495,58 @@ or suicidal thoughts.
 """
 
     # --------------------------------------------------
-    # Create conversation messages
+    # Create conversation
     # --------------------------------------------------
+
     messages = []
 
-    # --------------------------------------------------
-    # Add system message
-    # --------------------------------------------------
+    # System message
     messages.append({
         "role": "system",
         "content": system_prompt.strip()
     })
 
     # --------------------------------------------------
-    # Add previous conversation history
+    # Add previous conversation
     # --------------------------------------------------
+
     if "messages" in st.session_state:
 
         for message in st.session_state.messages:
 
-            # ------------------------------------------
-            # User message
-            # ------------------------------------------
-            if message["role"] == "user":
+            role = message.get("role")
+            content = message.get("content", "").strip()
+
+            if not content:
+                continue
+
+            if role == "user":
 
                 messages.append({
                     "role": "user",
-                    "content": message["content"]
+                    "content": content
                 })
 
-            # ------------------------------------------
-            # Assistant message
-            # ------------------------------------------
-            elif message["role"] == "robot":
+            elif role == "robot":
 
                 messages.append({
                     "role": "assistant",
-                    "content": message["content"]
+                    "content": content
                 })
 
     # --------------------------------------------------
     # Add current user message
-    #
-    # IMPORTANT:
-    # This is added here BEFORE it is stored in
-    # st.session_state.messages by main().
-    #
-    # This prevents the current message from appearing
-    # twice in the generated prompt.
     # --------------------------------------------------
+
     messages.append({
         "role": "user",
-        "content": prompt
+        "content": prompt.strip()
     })
 
     # --------------------------------------------------
-    # Generate prompt using InternLM chat template
+    # Convert conversation using InternLM chat template
     # --------------------------------------------------
+
     try:
 
         total_prompt = tokenizer.apply_chat_template(
@@ -588,6 +563,7 @@ or suicidal thoughts.
         # --------------------------------------------------
         # Fallback InternLM format
         # --------------------------------------------------
+
         total_prompt = (
             "<s>"
             "<|im_start|>system\n"
@@ -595,67 +571,88 @@ or suicidal thoughts.
             + "<|im_end|>\n"
         )
 
-        # --------------------------------------------------
-        # Add conversation messages
-        # --------------------------------------------------
         for message in messages[1:]:
 
-            if message["role"] == "user":
+            role = message["role"]
+            content = message["content"]
 
-                total_prompt += (
-                    "<|im_start|>user\n"
-                    + message["content"]
-                    + "<|im_end|>\n"
-                )
+            total_prompt += (
+                "<|im_start|>"
+                + role
+                + "\n"
+                + content
+                + "<|im_end|>\n"
+            )
 
-            elif message["role"] == "assistant":
-
-                total_prompt += (
-                    "<|im_start|>assistant\n"
-                    + message["content"]
-                    + "<|im_end|>\n"
-                )
-
-        # --------------------------------------------------
-        # Add assistant generation prompt
-        # --------------------------------------------------
-        total_prompt += (
-            "<|im_start|>assistant\n"
-        )
+        total_prompt += "<|im_start|>assistant\n"
 
     # --------------------------------------------------
-    # Temporary debugging
-    #
-    # Keep this for testing.
-    # We can remove it after all tests pass.
+    # Debug
     # --------------------------------------------------
-    with st.expander("🔍 Debug: Generated Prompt"):
-        st.code(total_prompt)
 
-    # --------------------------------------------------
-    # Return final prompt
-    # --------------------------------------------------
+    print()
+    print("===== GENERATED PROMPT =====")
+    print(total_prompt)
+    print("============================")
+    print()
+
     return total_prompt
 def is_self_harm_message(text):
-    text = text.lower()
+    """
+    Detect explicit self-harm or suicide-related statements.
 
-    self_harm_keywords = [
-        "hurt myself",
-        "hurting myself",
-        "harm myself",
-        "harming myself",
-        "kill myself",
-        "killing myself",
-        "suicide",
-        "suicidal",
-        "end my life",
-        "take my own life",
-        "want to die",
-        "don't want to live",
-        "dont want to live"
+    This is intentionally conservative and only checks for
+    explicit phrases. Normal discussion about stress, exams,
+    loneliness, sadness, etc. should not trigger this check.
+    """
+
+    text = text.lower().strip()
+
+    safety_phrases = [
+        "i am thinking about hurting myself",
+        "i'm thinking about hurting myself",
+        "i am thinking of hurting myself",
+        "i'm thinking of hurting myself",
+
+        "i want to hurt myself",
+        "i wanna hurt myself",
+
+        "i am going to hurt myself",
+        "i'm going to hurt myself",
+
+        "i want to kill myself",
+        "i wanna kill myself",
+
+        "i am going to kill myself",
+        "i'm going to kill myself",
+
+        "i want to die",
+        "i wanna die",
+
+        "i don't want to live anymore",
+        "i dont want to live anymore",
+
+        "i don't want to live",
+        "i dont want to live",
+
+        "i want to end my life",
+        "i wanna end my life",
+
+        "i am suicidal",
+        "i'm suicidal",
+
+        "suicidal thoughts",
+
+        "self harm",
+        "self-harm",
+
+        "suicide"
     ]
 
-    return any(keyword in text for keyword in self_harm_keywords)
+    return any(
+        phrase in text
+        for phrase in safety_phrases
+    )
 
 def get_safety_response():
     return (
@@ -672,82 +669,105 @@ def get_safety_response():
     )
 def main():
 
+    # ==================================================
+    # LOAD MODEL
+    # ==================================================
+
     print("load model begin.")
 
-    # --------------------------------------------------
-    # Load model and tokenizer
-    # --------------------------------------------------
     model, tokenizer = load_model()
 
     print("load model end.")
 
-    # --------------------------------------------------
-    # Avatar paths
-    # --------------------------------------------------
+    # ==================================================
+    # AVATARS
+    # ==================================================
+
     user_avator = USER_AVATAR
     robot_avator = ROBOT_AVATAR
 
-    # --------------------------------------------------
-    # Page title
-    # --------------------------------------------------
-    st.title("EmoLLM V3.0 Mental Health Counseling")
+    # ==================================================
+    # PAGE TITLE
+    # ==================================================
 
-    # --------------------------------------------------
-    # Generation settings
-    # --------------------------------------------------
+    st.title(
+        "EmoLLM V3.0 Mental Health Counseling"
+    )
+
+    # ==================================================
+    # GENERATION SETTINGS
+    # ==================================================
+
     generation_config = prepare_generation_config()
 
-    # --------------------------------------------------
-    # Initialize chat history
-    # --------------------------------------------------
+    # ==================================================
+    # INITIALIZE CHAT HISTORY
+    # ==================================================
+
     if "messages" not in st.session_state:
+
         st.session_state.messages = []
 
-    # --------------------------------------------------
-    # Display previous conversation
-    # --------------------------------------------------
+    # ==================================================
+    # DISPLAY PREVIOUS MESSAGES
+    # ==================================================
+
     for message in st.session_state.messages:
 
-        with st.chat_message(
-            message["role"],
-            avatar=message.get("avatar")
-        ):
-            st.markdown(message["content"])
+        role = message["role"]
 
-    # --------------------------------------------------
-    # Get new user input
-    # --------------------------------------------------
+        content = message["content"]
+
+        avatar = message.get("avatar")
+
+        # Streamlit accepts "user" and "assistant"
+        # as standard chat roles.
+
+        display_role = (
+            "assistant"
+            if role == "robot"
+            else "user"
+        )
+
+        with st.chat_message(
+            display_role,
+            avatar=avatar
+        ):
+
+            st.markdown(content)
+
+    # ==================================================
+    # USER INPUT
+    # ==================================================
+
     prompt = st.chat_input(
         "I'm here and ready to listen. Tell me what's on your mind..."
     )
 
-    if prompt:
+    if not prompt:
+        return
+
+    # ==================================================
+    # DISPLAY CURRENT USER MESSAGE
+    # ==================================================
+
+    with st.chat_message(
+        "user",
+        avatar=user_avator
+    ):
+
+        st.markdown(prompt)
+
+    # ==================================================
+    # SAFETY CHECK
+    # ==================================================
+
+    if is_self_harm_message(prompt):
 
         # --------------------------------------------------
-        # 1. Display current user message
+        # Save user message
         # --------------------------------------------------
-        with st.chat_message(
-            "user",
-            avatar=user_avator
-        ):
-            st.markdown(prompt)
 
-        # --------------------------------------------------
-        # 2. IMPORTANT:
-        # Build prompt BEFORE adding current message
-        # to session history.
-        #
-        # combine_history() itself adds the current prompt.
-        # Therefore, adding it here first would duplicate it.
-        # --------------------------------------------------
-        real_prompt = combine_history(
-            prompt,
-            tokenizer
-        )
-
-        # --------------------------------------------------
-        # 3. Save current user message to history
-        # --------------------------------------------------
         st.session_state.messages.append({
             "role": "user",
             "content": prompt,
@@ -755,56 +775,117 @@ def main():
         })
 
         # --------------------------------------------------
-        # 4. Generate assistant response
+        # Display fixed safety response
         # --------------------------------------------------
+
         with st.chat_message(
-            "robot",
+            "assistant",
             avatar=robot_avator
         ):
 
-            message_placeholder = st.empty()
-
-            cur_response = ""
-
-            # --------------------------------------------------
-            # Generate response token by token
-            # --------------------------------------------------
-            for response in generate_interactive(
-                model=model,
-                tokenizer=tokenizer,
-                prompt=real_prompt,
-                additional_eos_token_id=92542,
-                **asdict(generation_config),
-            ):
-
-                cur_response = response
-
-                # Display streaming response
-                message_placeholder.markdown(
-                    cur_response + "▌"
-                )
-
-            # --------------------------------------------------
-            # Display final response
-            # --------------------------------------------------
-            message_placeholder.markdown(
-                cur_response
+            st.markdown(
+                SAFETY_RESPONSE
             )
 
         # --------------------------------------------------
-        # 5. Save assistant response to history
+        # Save safety response
         # --------------------------------------------------
+
         st.session_state.messages.append({
             "role": "robot",
-            "content": cur_response,
-            "avatar": robot_avator,
+            "content": SAFETY_RESPONSE,
+            "avatar": robot_avator
         })
 
         # --------------------------------------------------
-        # 6. Clear CUDA cache
+        # Do NOT send the self-harm message to the model
         # --------------------------------------------------
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+
+        return
+
+    # ==================================================
+    # NORMAL CONVERSATION
+    # ==================================================
+
+    # IMPORTANT:
+    #
+    # Build the prompt BEFORE adding the current user
+    # message to st.session_state.messages.
+    #
+    # combine_history() needs the OLD history + current
+    # prompt exactly once.
+
+    real_prompt = combine_history(
+        prompt,
+        tokenizer
+    )
+
+    # ==================================================
+    # SAVE CURRENT USER MESSAGE
+    # ==================================================
+
+    st.session_state.messages.append({
+        "role": "user",
+        "content": prompt,
+        "avatar": user_avator
+    })
+
+    # ==================================================
+    # GENERATE ASSISTANT RESPONSE
+    # ==================================================
+
+    with st.chat_message(
+        "assistant",
+        avatar=robot_avator
+    ):
+
+        message_placeholder = st.empty()
+
+        cur_response = ""
+
+        # --------------------------------------------------
+        # Generate response
+        # --------------------------------------------------
+
+        for response in generate_interactive(
+            model=model,
+            tokenizer=tokenizer,
+            prompt=real_prompt,
+            additional_eos_token_id=92542,
+            **asdict(generation_config),
+        ):
+
+            cur_response = response
+
+            message_placeholder.markdown(
+                cur_response + "▌"
+            )
+
+        # --------------------------------------------------
+        # Remove cursor
+        # --------------------------------------------------
+
+        message_placeholder.markdown(
+            cur_response
+        )
+
+    # ==================================================
+    # SAVE ASSISTANT RESPONSE
+    # ==================================================
+
+    st.session_state.messages.append({
+        "role": "robot",
+        "content": cur_response,
+        "avatar": robot_avator
+    })
+
+    # ==================================================
+    # CLEAR CUDA CACHE
+    # ==================================================
+
+    if torch.cuda.is_available():
+
+        torch.cuda.empty_cache()
 
 
 if __name__ == "__main__":
