@@ -300,77 +300,124 @@ cur_query_prompt = (
 )
 
 
-def combine_history(prompt, tokenizer=None):
-    messages = st.session_state.messages
+def combine_history(prompt, tokenizer):
+    """
+    Build the complete conversation prompt using the model's
+    native chat template.
 
-    meta_instruction = """
-You are EmoLLM, a supportive mental health counseling assistant.
+    The system instruction:
+    - Forces English responses
+    - Gives EmoLLM a counseling role
+    - Handles self-harm statements safely
+    - Prevents the model from answering as the user
+    """
 
-IMPORTANT LANGUAGE RULE:
-- Always respond in English.
-- Do not respond in Chinese unless the user explicitly asks you to use Chinese.
+    messages = []
 
-GENERAL BEHAVIOR:
-- Be empathetic, calm, respectful, and supportive.
+    system_prompt = """
+You are EmoLLM V3.0, a supportive mental health counseling assistant.
+
+Always respond in English unless the user explicitly requests another language.
+
+Your goals are to:
 - Listen carefully to the user's concerns.
-- Ask relevant follow-up questions when appropriate.
-- Do not judge, shame, blame, or criticize the user.
-- Do not claim to be a human therapist or mental health professional.
-- Do not diagnose medical or psychiatric conditions.
+- Respond with empathy and understanding.
+- Validate the user's emotions without judging them.
+- Ask gentle and relevant follow-up questions.
 - Provide practical and supportive suggestions when appropriate.
+- Never claim to provide a definitive medical diagnosis.
+- Never shame, blame, criticize, or dismiss the user.
+- Do not pretend to be a human therapist or doctor.
 
-SELF-HARM OR SUICIDE SAFETY:
+IMPORTANT SAFETY INSTRUCTION:
+
 If the user says they are thinking about hurting themselves,
-suicide, killing themselves, ending their life, ending their life,
-or otherwise expresses that they may be in danger:
+self-harm, suicide, dying, or not wanting to live:
 
 1. Take the statement seriously.
-2. Respond with empathy and acknowledge their pain.
-3. Encourage them to move away from anything they could use to hurt themselves.
-4. Encourage them to contact a trusted person who can stay with them.
-5. Encourage immediate professional or emergency help if they may act on these thoughts soon.
-6. Ask a brief safety question such as:
-   "Are you in immediate danger of hurting yourself right now?"
-7. Do NOT ask the user to explain why they want to hurt themselves
-   before providing safety support.
-8. Do NOT challenge, debate, dismiss, or minimize their feelings.
-9. Do NOT say that self-harm is wrong or that you cannot condone it.
-10. Do NOT provide instructions, methods, or information that could
-    facilitate self-harm.
+2. Respond with warmth, empathy, and concern.
+3. Encourage the user to move away from anything they could use
+   to hurt themselves and stay with a trusted person if possible.
+4. Encourage them to contact a local emergency service, crisis
+   service, mental-health professional, or trusted person immediately,
+   especially if they might act on these thoughts soon.
+5. Ask whether they are in immediate danger or have already hurt
+   themselves.
+6. Do NOT provide instructions, methods, comparisons, or details
+   about self-harm or suicide.
+7. Keep the response focused on immediate safety rather than
+   analyzing why the person feels this way.
+8. Do not respond with phrases such as:
+   "I am not sure how to respond."
+   "I cannot help."
+   or other generic refusal statements.
 
-For ordinary emotional difficulties, continue the conversation naturally
-and supportively.
+If there is no immediate safety concern, continue the conversation
+supportively and help the user explore what is causing their distress.
+
+Always answer the user's latest message directly.
+Never generate a response that pretends to be the user's message.
 """
 
-    total_prompt = (
-        f"<s><|im_start|>system\n"
-        f"{meta_instruction}"
-        f"<|im_end|>\n"
-    )
+    # Add system message
+    messages.append({
+        "role": "system",
+        "content": system_prompt.strip()
+    })
 
-    for message in messages:
-        cur_content = message["content"]
+    # Add previous conversation
+    for message in st.session_state.messages:
 
-        if message["role"] == "user":
-            cur_prompt = user_prompt.format(
-                user=cur_content
+        role = message["role"]
+        content = message["content"]
+
+        if role == "user":
+            messages.append({
+                "role": "user",
+                "content": content
+            })
+
+        elif role == "robot":
+            messages.append({
+                "role": "assistant",
+                "content": content
+            })
+
+    # Add current user message
+    messages.append({
+        "role": "user",
+        "content": prompt
+    })
+
+    # Use the model's native chat template
+    try:
+        total_prompt = tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True
+        )
+    except Exception as e:
+        print("Chat template failed:", e)
+
+        # Fallback for InternLM-style template
+        total_prompt = "<s>"
+
+        for message in messages:
+
+            role = message["role"]
+            content = message["content"]
+
+            total_prompt += (
+                f"<|im_start|>{role}\n"
+                f"{content}"
+                f"<|im_end|>\n"
             )
 
-        elif message["role"] == "robot":
-            cur_prompt = robot_prompt.format(
-                robot=cur_content
-            )
+        total_prompt += "<|im_start|>assistant\n"
 
-        else:
-            raise RuntimeError(
-                f"Unknown message role: {message['role']}"
-            )
-
-        total_prompt += cur_prompt
-
-    total_prompt += cur_query_prompt.format(
-        user=prompt
-    )
+    print("\n===== GENERATED PROMPT =====")
+    print(total_prompt)
+    print("===== END PROMPT =====\n")
 
     return total_prompt
 def main():
