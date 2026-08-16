@@ -443,64 +443,99 @@ Your role is to:
 - provide practical and supportive suggestions
 - never judge, shame, or criticize the user
 - never claim to provide a definitive medical diagnosis
-- never invent facts about the user
-- never invent previous conversations
-- never invent people, events, problems, symptoms, or experiences
-- only use information explicitly provided in the conversation
+- never repeat the user's message as your response
+- always respond naturally as the assistant
 
-IMPORTANT CONVERSATION MEMORY RULE:
+For ordinary emotional concerns, provide supportive,
+empathetic and practical responses.
 
-The conversation history provided below is the only source
-of information about what the user previously said.
+IMPORTANT FACTUAL ACCURACY RULE:
 
-When referring to previous conversation:
+Never invent facts about the user.
 
-- use only explicitly stated information
-- do not infer unstated causes
-- do not invent specific problems
-- do not invent examples
-- do not invent events
-- do not invent people
-- do not turn assumptions into facts
+Only state information as a fact if the user explicitly
+provided that information in the conversation.
+
+Do not assume or invent:
+
+- exam dates
+- schedules
+- relationships
+- names
+- locations
+- events
+- causes
+- intentions
+- symptoms
+- diagnoses
+- previous statements
+- future events
+
+If the user has not provided the information,
+do not guess.
 
 For example:
 
-If the user says:
-"I keep getting stuck on new mathematics problems."
+User:
+"I am worried about my mathematics exam."
 
-You may say:
-"You told me that you keep getting stuck on new mathematics problems."
+Incorrect:
+"Your mathematics exam is next week."
 
-You must NOT say:
-"You were having trouble with a spaceship and planet problem."
+Correct:
+"You mentioned that you are worried about your
+mathematics exam."
 
-If the requested information is not present in the conversation,
-say that the information is not available.
+Never claim that an event, date, person, or fact exists
+unless the user explicitly mentioned it.
+
+IMPORTANT CONVERSATION MEMORY RULE:
+
+Only use information contained in the conversation
+messages provided to you.
+
+Never invent, assume, or fabricate previous
+conversations, events, people, concerns, or statements.
+
+When referring to something the user said earlier,
+use only information that the user explicitly provided.
+
+Do not turn assumptions or likely explanations into facts.
+
+For example:
+
+User:
+"I am especially worried about mathematics."
+
+Do NOT say:
+"You are worried because you might fail."
+
+because the user never said that.
+
+You MAY say:
+"You told me that you are especially worried
+about mathematics."
 
 IMPORTANT SAFETY RULE:
 
-If the user explicitly expresses thoughts about suicide,
-self-harm, hurting themselves, wanting to die, or not wanting
-to live:
+If the user expresses thoughts about suicide,
+self-harm, hurting themselves, wanting to die,
+or not wanting to live:
 
-- take the statement seriously
-- respond with empathy and concern
-- do not ask them to justify why they feel this way
-- do not provide instructions or methods for self-harm
-- encourage them to move away from anything they could use
-  to hurt themselves
-- encourage them to stay with a trusted person
-- encourage them to contact appropriate professional or
-  emergency support if they may act on these thoughts
-- ask whether they are in immediate danger or have already
-  hurt themselves
+- Take the statement seriously.
+- Respond with empathy and concern.
+- Do not ask the user to justify why they feel this way.
+- Do not provide instructions or methods for self-harm.
+- Encourage the person to move away from anything
+  they could use to hurt themselves.
+- Encourage the person to stay with someone they trust.
+- Encourage them to contact a mental-health professional
+  or emergency service if they may act on these thoughts.
+- Ask whether they are in immediate danger or have
+  already hurt themselves.
 
-Do not trigger the safety response for ordinary stress,
-exam anxiety, loneliness, sadness, frustration, or other
-emotional concerns unless the user explicitly expresses
+Never minimize, dismiss, or judge expressions of
 self-harm or suicidal thoughts.
-
-Always respond naturally as the assistant.
 """
 
     # ==================================================
@@ -518,21 +553,25 @@ Always respond naturally as the assistant.
     # ADD PREVIOUS CONVERSATION
     # ==================================================
 
-    history = st.session_state.get(
+    previous_messages = st.session_state.get(
         "messages",
         []
     )
 
-    for message in history:
+    for message in previous_messages:
 
         role = message.get("role")
-        content = message.get("content", "").strip()
+
+        content = message.get(
+            "content",
+            ""
+        ).strip()
 
         if not content:
             continue
 
         # ----------------------------------------------
-        # User
+        # USER
         # ----------------------------------------------
 
         if role == "user":
@@ -543,7 +582,7 @@ Always respond naturally as the assistant.
             })
 
         # ----------------------------------------------
-        # Assistant
+        # ASSISTANT
         # ----------------------------------------------
 
         elif role == "robot":
@@ -698,31 +737,15 @@ def get_safety_response():
     )
 def answer_memory_question(prompt):
     """
-    Answer conversation-memory questions using ONLY information
-    explicitly provided by the user in st.session_state.messages.
-
-    Rules:
-    - Never invent information.
-    - Never infer a worry from a related statement.
-    - Never infer a problem from a related statement.
-    - For problem questions, return only the relevant
-      explicitly stated problem.
-    - For worry questions, return only an explicitly stated worry.
-    - For general memory questions, return an actual previous
-      user statement.
+    Answer simple conversation-memory questions using only
+    information explicitly provided by the user.
 
     Returns:
         str | None
 
-        Returns a deterministic answer if the prompt is a
-        recognized memory question.
-
-        Returns None if the prompt is not a memory question.
+        A deterministic answer if this is a memory question.
+        None if this is a normal conversation question.
     """
-
-    # ==================================================
-    # NORMALIZE CURRENT PROMPT
-    # ==================================================
 
     prompt_lower = prompt.lower().strip()
 
@@ -731,18 +754,9 @@ def answer_memory_question(prompt):
     # ==================================================
 
     memory_questions = [
-
-        # --------------------------------------------------
-        # Worry / concern
-        # --------------------------------------------------
-
         "what was i worried about earlier",
         "what was i worried about",
         "what am i worried about",
-
-        # --------------------------------------------------
-        # General memory
-        # --------------------------------------------------
 
         "what did i say earlier",
         "what did i tell you earlier",
@@ -753,19 +767,10 @@ def answer_memory_question(prompt):
         "what was i talking about earlier",
         "what was i talking about",
 
-        # --------------------------------------------------
-        # Problem memory
-        # --------------------------------------------------
-
         "what problem was i having earlier",
         "what problem was i having",
         "what problem am i having",
         "what was my problem earlier",
-        "what was my problem",
-
-        # --------------------------------------------------
-        # Remember questions
-        # --------------------------------------------------
 
         "do you remember what i said",
         "do you remember what i told you",
@@ -777,15 +782,12 @@ def answer_memory_question(prompt):
     # ==================================================
 
     is_memory_question = any(
-        question in prompt_lower
+        question == prompt_lower
         for question in memory_questions
     )
 
-    # --------------------------------------------------
-    # Not a memory question
-    # --------------------------------------------------
-
     if not is_memory_question:
+
         return None
 
     # ==================================================
@@ -798,17 +800,24 @@ def answer_memory_question(prompt):
     )
 
     # ==================================================
-    # COLLECT ONLY USER MESSAGES
+    # NO HISTORY
+    # ==================================================
+
+    if not messages:
+
+        return (
+            "I don't have that information available "
+            "in the current conversation. "
+            "You haven't explicitly told me that."
+        )
+
+    # ==================================================
+    # COLLECT USER'S EXPLICIT STATEMENTS
     # ==================================================
 
     user_messages = []
 
     for message in messages:
-
-        # Only consider actual user messages.
-        #
-        # Do NOT use assistant responses because they
-        # may contain model-generated assumptions.
 
         if message.get("role") != "user":
             continue
@@ -818,331 +827,135 @@ def answer_memory_question(prompt):
             ""
         ).strip()
 
-        if not content:
-            continue
+        if content:
 
-        user_messages.append(content)
+            user_messages.append(content)
 
     # ==================================================
-    # NO USER HISTORY
+    # NO USER INFORMATION
     # ==================================================
 
     if not user_messages:
 
         return (
             "I don't have that information available "
-            "in the current conversation."
+            "in the current conversation. "
+            "You haven't explicitly told me that."
         )
 
     # ==================================================
-    # 1. WORRY / CONCERN MEMORY
+    # "WHAT AM I WORRIED ABOUT?"
     # ==================================================
 
     if (
-        "worried" in prompt_lower
-        or "worry" in prompt_lower
-        or "concerned" in prompt_lower
-        or "concern" in prompt_lower
+        "what am i worried about" in prompt_lower
+        or "what was i worried about" in prompt_lower
     ):
 
         worried_statements = []
 
-        # --------------------------------------------------
-        # Search every previous user message
-        # --------------------------------------------------
-
         for message in user_messages:
 
-            # --------------------------------------------------
-            # Split message into sentences
-            # --------------------------------------------------
+            text = message.lower()
 
-            sentences = (
-                message
-                .replace("!", ".")
-                .replace("?", ".")
-                .split(".")
-            )
+            # Only accept explicit statements
+            if (
+                "i am worried about" in text
+                or "i'm worried about" in text
+                or "i am worried that" in text
+                or "i'm worried that" in text
+                or "i worry about" in text
+            ):
 
-            for sentence in sentences:
+                worried_statements.append(message)
 
-                sentence = sentence.strip()
-
-                if not sentence:
-                    continue
-
-                text = sentence.lower()
-
-                # --------------------------------------------------
-                # Explicit worry statements only
-                # --------------------------------------------------
-
-                explicit_worry = (
-
-                    "i am worried" in text
-                    or "i'm worried" in text
-                    or "im worried" in text
-
-                    or "i was worried" in text
-                    or "i've been worried" in text
-                    or "i have been worried" in text
-
-                    or "i am concerned" in text
-                    or "i'm concerned" in text
-                    or "im concerned" in text
-
-                    or "i was concerned" in text
-                    or "i've been concerned" in text
-                    or "i have been concerned" in text
-
-                    or "i worry about" in text
-                    or "i'm worrying about" in text
-                    or "im worrying about" in text
-                    or "i am worrying about" in text
-
-                    or "i am anxious about" in text
-                    or "i'm anxious about" in text
-                    or "im anxious about" in text
-
-                    or "i was anxious about" in text
-
-                    or "i am stressed about" in text
-                    or "i'm stressed about" in text
-                    or "im stressed about" in text
-
-                    or "i was stressed about" in text
-                )
-
-                if explicit_worry:
-
-                    worried_statements.append(
-                        sentence
-                    )
-
-        # --------------------------------------------------
+        # ----------------------------------------------
         # Explicit worry found
-        # --------------------------------------------------
+        # ----------------------------------------------
 
         if worried_statements:
 
-            latest = worried_statements[-1]
-
             return (
                 "You told me that "
-                + latest
-                + "."
+                + worried_statements[-1]
             )
 
-        # --------------------------------------------------
+        # ----------------------------------------------
         # No explicit worry found
-        # --------------------------------------------------
+        # ----------------------------------------------
 
         return (
             "I don't have that information available "
-            "in the current conversation. You haven't "
-            "explicitly told me what you are worried about."
+            "in the current conversation. "
+            "You haven't explicitly told me what "
+            "you are worried about."
         )
 
     # ==================================================
-    # 2. PROBLEM MEMORY
+    # "WHAT PROBLEM AM I HAVING?"
     # ==================================================
 
     if (
-        "what problem" in prompt_lower
+        "what problem am i having" in prompt_lower
+        or "what problem was i having" in prompt_lower
         or "what was my problem" in prompt_lower
     ):
 
         problem_statements = []
 
-        # --------------------------------------------------
-        # Search every previous user message
-        # --------------------------------------------------
-
         for message in user_messages:
 
-            # --------------------------------------------------
-            # Split message into individual sentences
-            # --------------------------------------------------
+            text = message.lower()
 
-            sentences = (
-                message
-                .replace("!", ".")
-                .replace("?", ".")
-                .split(".")
-            )
+            # Only use explicit user statements.
+            #
+            # Example:
+            # "I keep getting stuck on new mathematics
+            # problems."
+            #
+            # is valid.
+            if (
+                "i am having trouble" in text
+                or "i'm having trouble" in text
+                or "i am struggling" in text
+                or "i'm struggling" in text
+                or "i keep getting stuck" in text
+                or "i get stuck" in text
+                or "i am stuck" in text
+                or "i'm stuck" in text
+            ):
 
-            for sentence in sentences:
+                problem_statements.append(message)
 
-                sentence = sentence.strip()
-
-                if not sentence:
-                    continue
-
-                text = sentence.lower()
-
-                # --------------------------------------------------
-                # Explicit problem statements
-                # --------------------------------------------------
-
-                explicit_problem = (
-
-                    # ----------------------------------------------
-                    # "problem"
-                    # ----------------------------------------------
-
-                    "i have a problem" in text
-                    or "i've got a problem" in text
-                    or "i have got a problem" in text
-
-                    or "i'm having a problem" in text
-                    or "im having a problem" in text
-                    or "i am having a problem" in text
-
-                    or "i had a problem" in text
-
-                    # ----------------------------------------------
-                    # "trouble"
-                    # ----------------------------------------------
-
-                    or "i'm having trouble" in text
-                    or "im having trouble" in text
-                    or "i am having trouble" in text
-
-                    or "i had trouble" in text
-
-                    or "i'm having difficulty" in text
-                    or "im having difficulty" in text
-                    or "i am having difficulty" in text
-
-                    or "i had difficulty" in text
-
-                    # ----------------------------------------------
-                    # "stuck"
-                    # ----------------------------------------------
-
-                    or "i keep getting stuck" in text
-                    or "i am getting stuck" in text
-                    or "i'm getting stuck" in text
-                    or "im getting stuck" in text
-
-                    or "i am stuck" in text
-                    or "i'm stuck" in text
-                    or "im stuck" in text
-
-                    # ----------------------------------------------
-                    # "cannot / can't solve"
-                    # ----------------------------------------------
-
-                    or "i cannot solve" in text
-                    or "i can't solve" in text
-                    or "i cant solve" in text
-
-                    or "i cannot figure out" in text
-                    or "i can't figure out" in text
-                    or "i cant figure out" in text
-
-                    # ----------------------------------------------
-                    # "cannot / can't understand"
-                    # ----------------------------------------------
-
-                    or "i cannot understand" in text
-                    or "i can't understand" in text
-                    or "i cant understand" in text
-
-                    # ----------------------------------------------
-                    # "struggling"
-                    # ----------------------------------------------
-
-                    or "i am struggling" in text
-                    or "i'm struggling" in text
-                    or "im struggling" in text
-
-                    # ----------------------------------------------
-                    # "difficulty"
-                    # ----------------------------------------------
-
-                    or "i find it difficult" in text
-                    or "i find it hard" in text
-
-                    or "i am finding it difficult" in text
-                    or "i'm finding it difficult" in text
-                    or "im finding it difficult" in text
-                )
-
-                if explicit_problem:
-
-                    problem_statements.append(
-                        sentence
-                    )
-
-        # --------------------------------------------------
+        # ----------------------------------------------
         # Explicit problem found
-        # --------------------------------------------------
+        # ----------------------------------------------
 
         if problem_statements:
 
-            latest = problem_statements[-1]
-
             return (
                 "You told me that "
-                + latest
-                + "."
+                + problem_statements[-1]
             )
 
-        # --------------------------------------------------
+        # ----------------------------------------------
         # No explicit problem found
-        # --------------------------------------------------
+        # ----------------------------------------------
 
         return (
             "I don't have that information available "
-            "in the current conversation. You haven't "
-            "explicitly told me what problem you were having."
+            "in the current conversation. "
+            "You haven't explicitly told me what "
+            "problem you are having."
         )
 
     # ==================================================
-    # 3. GENERAL MEMORY QUESTIONS
-    # ==================================================
-
-    if (
-        "what did i say" in prompt_lower
-        or "what did i tell you" in prompt_lower
-        or "what did i mention" in prompt_lower
-    ):
-
-        return (
-            "Earlier, you told me: "
-            + user_messages[-1]
-        )
-
-    # ==================================================
-    # 4. "WHAT WAS I TALKING ABOUT?"
-    # ==================================================
-
-    if "what was i talking about" in prompt_lower:
-
-        return (
-            "Earlier, you told me: "
-            + user_messages[-1]
-        )
-
-    # ==================================================
-    # 5. "DO YOU REMEMBER...?"
-    # ==================================================
-
-    if "do you remember" in prompt_lower:
-
-        return (
-            "Earlier, you told me: "
-            + user_messages[-1]
-        )
-
-    # ==================================================
-    # FINAL SAFE FALLBACK
+    # GENERAL MEMORY QUESTION
     # ==================================================
 
     return (
-        "I don't have that information available "
-        "in the current conversation."
+        "Earlier, you told me: "
+        + user_messages[-1]
     )
 def main():
 
@@ -1182,6 +995,7 @@ def main():
     # ==================================================
 
     if "messages" not in st.session_state:
+
         st.session_state.messages = []
 
     # ==================================================
@@ -1191,16 +1005,26 @@ def main():
     for message in st.session_state.messages:
 
         role = message.get("role")
-        content = message.get("content", "")
-        avatar = message.get("avatar")
 
-        # Convert internal "robot" role to Streamlit
-        # "assistant" role
+        content = message.get(
+            "content",
+            ""
+        )
 
-        if role == "robot":
-            display_role = "assistant"
-        else:
-            display_role = "user"
+        avatar = message.get(
+            "avatar"
+        )
+
+        # Streamlit uses:
+        #
+        # user
+        # assistant
+        #
+        display_role = (
+            "assistant"
+            if role == "robot"
+            else "user"
+        )
 
         with st.chat_message(
             display_role,
@@ -1214,10 +1038,12 @@ def main():
     # ==================================================
 
     prompt = st.chat_input(
-        "I'm here and ready to listen. Tell me what's on your mind..."
+        "I'm here and ready to listen. "
+        "Tell me what's on your mind..."
     )
 
     if not prompt:
+
         return
 
     # ==================================================
@@ -1232,25 +1058,14 @@ def main():
         st.markdown(prompt)
 
     # ==================================================
-    # SAFETY CHECK
+    # 1. SAFETY CHECK
     # ==================================================
-
-    # IMPORTANT:
-    #
-    # Safety must be checked BEFORE:
-    #
-    # 1. memory handling
-    # 2. combine_history()
-    # 3. model generation
-    #
-    # Therefore self-harm messages never reach
-    # the language model.
 
     if is_self_harm_message(prompt):
 
-        # --------------------------------------------------
+        # ----------------------------------------------
         # Save user message
-        # --------------------------------------------------
+        # ----------------------------------------------
 
         st.session_state.messages.append({
             "role": "user",
@@ -1258,9 +1073,9 @@ def main():
             "avatar": user_avator
         })
 
-        # --------------------------------------------------
+        # ----------------------------------------------
         # Display fixed safety response
-        # --------------------------------------------------
+        # ----------------------------------------------
 
         with st.chat_message(
             "assistant",
@@ -1271,9 +1086,9 @@ def main():
                 SAFETY_RESPONSE
             )
 
-        # --------------------------------------------------
+        # ----------------------------------------------
         # Save safety response
-        # --------------------------------------------------
+        # ----------------------------------------------
 
         st.session_state.messages.append({
             "role": "robot",
@@ -1281,40 +1096,47 @@ def main():
             "avatar": robot_avator
         })
 
-        # --------------------------------------------------
-        # Do NOT send safety message to model
-        # --------------------------------------------------
+        # ----------------------------------------------
+        # IMPORTANT:
+        # Do NOT send self-harm message to model.
+        # ----------------------------------------------
 
         return
 
     # ==================================================
-    # MEMORY QUESTION CHECK
+    # 2. MEMORY QUESTION
     # ==================================================
-
-    # Examples:
-    #
-    # "What was I worried about earlier?"
-    # "What did I say earlier?"
-    # "What problem am I having?"
-    # "What did I tell you?"
-    #
-    # These questions are answered using the actual
-    # conversation history instead of allowing the
-    # 7B model to invent information.
 
     memory_response = answer_memory_question(
         prompt
     )
 
     # ==================================================
-    # MEMORY QUESTION FOUND
+    # MEMORY DEBUG
+    # ==================================================
+
+    print()
+    print("===== MEMORY DEBUG =====")
+    print(
+        "User prompt:",
+        prompt
+    )
+    print(
+        "Memory response:",
+        memory_response
+    )
+    print("========================")
+    print()
+
+    # ==================================================
+    # IF MEMORY QUESTION WAS DETECTED
     # ==================================================
 
     if memory_response is not None:
 
-        # --------------------------------------------------
+        # ----------------------------------------------
         # Save current user message
-        # --------------------------------------------------
+        # ----------------------------------------------
 
         st.session_state.messages.append({
             "role": "user",
@@ -1322,9 +1144,9 @@ def main():
             "avatar": user_avator
         })
 
-        # --------------------------------------------------
+        # ----------------------------------------------
         # Display deterministic memory response
-        # --------------------------------------------------
+        # ----------------------------------------------
 
         with st.chat_message(
             "assistant",
@@ -1335,9 +1157,9 @@ def main():
                 memory_response
             )
 
-        # --------------------------------------------------
+        # ----------------------------------------------
         # Save memory response
-        # --------------------------------------------------
+        # ----------------------------------------------
 
         st.session_state.messages.append({
             "role": "robot",
@@ -1345,25 +1167,24 @@ def main():
             "avatar": robot_avator
         })
 
-        # --------------------------------------------------
-        # Do NOT send memory question to model
-        # --------------------------------------------------
+        # ----------------------------------------------
+        # IMPORTANT:
+        # Do NOT send memory question to LLM.
+        # ----------------------------------------------
 
         return
 
     # ==================================================
-    # NORMAL CONVERSATION
+    # 3. NORMAL CONVERSATION
     # ==================================================
 
     # IMPORTANT:
     #
-    # Build the prompt BEFORE adding the current user
-    # message to st.session_state.messages.
+    # Build prompt BEFORE adding the current user
+    # message to session history.
     #
-    # combine_history() itself adds the current prompt.
-    #
-    # If we added it first, the current message would
-    # appear twice in the generated prompt.
+    # This prevents the current message from appearing
+    # twice in the generated prompt.
 
     real_prompt = combine_history(
         prompt,
@@ -1381,7 +1202,7 @@ def main():
     })
 
     # ==================================================
-    # GENERATE MODEL RESPONSE
+    # GENERATE ASSISTANT RESPONSE
     # ==================================================
 
     with st.chat_message(
@@ -1393,9 +1214,9 @@ def main():
 
         cur_response = ""
 
-        # --------------------------------------------------
+        # ----------------------------------------------
         # Generate response
-        # --------------------------------------------------
+        # ----------------------------------------------
 
         for response in generate_interactive(
             model=model,
@@ -1411,9 +1232,9 @@ def main():
                 cur_response + "▌"
             )
 
-        # --------------------------------------------------
-        # Remove cursor after generation
-        # --------------------------------------------------
+        # ----------------------------------------------
+        # Remove cursor
+        # ----------------------------------------------
 
         message_placeholder.markdown(
             cur_response
@@ -1443,4 +1264,5 @@ def main():
 # ======================================================
 
 if __name__ == "__main__":
+
     main()
