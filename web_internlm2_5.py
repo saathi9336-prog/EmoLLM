@@ -1062,7 +1062,7 @@ def main():
     memory_response = answer_memory_question(
         prompt
     )
-    st.warning("MEMORY CHECK: " + str(memory_response))
+    
 
     # ==================================================
     # TEMPORARY MEMORY DEBUG
@@ -1070,26 +1070,7 @@ def main():
 
     if memory_response is not None:
 
-        st.warning(
-            "MEMORY FUNCTION WAS CALLED"
-        )
-
-        st.write(
-            "User question:"
-        )
-
-        st.code(
-            prompt
-        )
-
-        st.write(
-            "Memory answer:"
-        )
-
-        st.code(
-            memory_response
-        )
-
+        
         # --------------------------------------------------
         # Display deterministic memory response
         # --------------------------------------------------
