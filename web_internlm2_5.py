@@ -1107,26 +1107,18 @@ def main():
     # 2. MEMORY QUESTION
     # ==================================================
 
-    memory_response = answer_memory_question(
-        prompt
-    )
+    memory_response = answer_memory_question(prompt)
 
-    # ==================================================
-    # MEMORY DEBUG
-    # ==================================================
-
-    print()
-    print("===== MEMORY DEBUG =====")
-    print(
-        "User prompt:",
-        prompt
-    )
-    print(
-        "Memory response:",
-        memory_response
-    )
-    print("========================")
-    print()
+    # Debug information shown directly in Streamlit
+    if memory_response is not None:
+    
+        with st.expander("🔍 Memory Debug", expanded=True):
+    
+            st.write("User prompt:")
+            st.code(prompt)
+    
+            st.write("Memory response:")
+            st.code(memory_response)
 
     # ==================================================
     # IF MEMORY QUESTION WAS DETECTED
