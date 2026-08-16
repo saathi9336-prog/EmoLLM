@@ -736,42 +736,35 @@ def get_safety_response():
         "or have you already hurt yourself?"
     )
 def answer_memory_question(prompt):
-    """
-    Answer simple conversation-memory questions using only
-    information explicitly provided by the user.
-
-    This function does NOT use the LLM.
-
-    Returns:
-        str:
-            Deterministic memory answer.
-
-        None:
-            If the current prompt is not a memory question.
-    """
 
     # ==================================================
-    # CLEAN CURRENT PROMPT
+    # NORMALIZE USER QUESTION
     # ==================================================
 
     prompt_lower = prompt.lower().strip()
 
+    # Remove punctuation such as:
+    # ?
+    # .
+    # !
+    # ,
+
+    import re
+
+    prompt_clean = re.sub(
+        r"[^\w\s]",
+        "",
+        prompt_lower
+    ).strip()
+
     # ==================================================
-    # MEMORY QUESTION PATTERNS
+    # MEMORY QUESTIONS
     # ==================================================
 
     memory_questions = [
-        # ----------------------------------------------
-        # Worry
-        # ----------------------------------------------
-
         "what was i worried about earlier",
         "what was i worried about",
         "what am i worried about",
-
-        # ----------------------------------------------
-        # Previous statements
-        # ----------------------------------------------
 
         "what did i say earlier",
         "what did i tell you earlier",
@@ -779,25 +772,13 @@ def answer_memory_question(prompt):
         "what did i mention earlier",
         "what did i mention",
 
-        # ----------------------------------------------
-        # Previous topic
-        # ----------------------------------------------
-
         "what was i talking about earlier",
         "what was i talking about",
-
-        # ----------------------------------------------
-        # Problem
-        # ----------------------------------------------
 
         "what problem was i having earlier",
         "what problem was i having",
         "what problem am i having",
         "what was my problem earlier",
-
-        # ----------------------------------------------
-        # Memory
-        # ----------------------------------------------
 
         "do you remember what i said",
         "do you remember what i told you",
@@ -805,15 +786,15 @@ def answer_memory_question(prompt):
     ]
 
     # ==================================================
-    # CHECK WHETHER THIS IS A MEMORY QUESTION
+    # CHECK MEMORY QUESTION
     # ==================================================
 
-    if prompt_lower not in memory_questions:
+    if prompt_clean not in memory_questions:
 
         return None
 
     # ==================================================
-    # GET CONVERSATION HISTORY
+    # GET HISTORY
     # ==================================================
 
     messages = st.session_state.get(
@@ -822,7 +803,7 @@ def answer_memory_question(prompt):
     )
 
     # ==================================================
-    # COLLECT ONLY USER MESSAGES
+    # COLLECT USER MESSAGES
     # ==================================================
 
     user_messages = []
@@ -837,30 +818,30 @@ def answer_memory_question(prompt):
             ""
         ).strip()
 
-        if not content:
-            continue
+        if content:
 
-        user_messages.append(content)
+            user_messages.append(
+                content
+            )
 
     # ==================================================
-    # NO USER HISTORY
+    # NO HISTORY
     # ==================================================
 
     if not user_messages:
 
         return (
             "I don't have that information available "
-            "in the current conversation. "
-            "You haven't explicitly told me that."
+            "in the current conversation."
         )
 
     # ==================================================
-    # WORRY MEMORY
+    # WORRY QUESTION
     # ==================================================
 
     if (
-        "worried" in prompt_lower
-        or "worry" in prompt_lower
+        "worried" in prompt_clean
+        or "worry" in prompt_clean
     ):
 
         worried_statements = []
@@ -868,9 +849,6 @@ def answer_memory_question(prompt):
         for message in user_messages:
 
             text = message.lower()
-
-            # Only accept explicit statements
-            # containing "worried" or "worry".
 
             if (
                 "worried" in text
@@ -881,20 +859,12 @@ def answer_memory_question(prompt):
                     message
                 )
 
-        # ----------------------------------------------
-        # Return most recent explicit worry
-        # ----------------------------------------------
-
         if worried_statements:
 
             return (
                 "You told me that "
                 + worried_statements[-1]
             )
-
-        # ----------------------------------------------
-        # No explicit worry found
-        # ----------------------------------------------
 
         return (
             "I don't have that information available "
@@ -904,20 +874,16 @@ def answer_memory_question(prompt):
         )
 
     # ==================================================
-    # PROBLEM MEMORY
+    # PROBLEM QUESTION
     # ==================================================
 
-    if "problem" in prompt_lower:
+    if "problem" in prompt_clean:
 
         problem_statements = []
 
         for message in user_messages:
 
             text = message.lower()
-
-            # ------------------------------------------
-            # Explicit problem-related statements
-            # ------------------------------------------
 
             if (
                 "problem" in text
@@ -932,10 +898,6 @@ def answer_memory_question(prompt):
                     message
                 )
 
-        # ----------------------------------------------
-        # Return most recent explicit problem statement
-        # ----------------------------------------------
-
         if problem_statements:
 
             return (
@@ -943,28 +905,14 @@ def answer_memory_question(prompt):
                 + problem_statements[-1]
             )
 
-        # ----------------------------------------------
-        # No explicit problem found
-        # ----------------------------------------------
-
         return (
             "I don't have that information available "
-            "in the current conversation. "
-            "You haven't explicitly told me what "
-            "problem you are having."
+            "in the current conversation."
         )
 
     # ==================================================
-    # GENERAL MEMORY QUESTION
+    # GENERAL MEMORY
     # ==================================================
-
-    # For questions such as:
-    #
-    # "What did I say earlier?"
-    #
-    # return the most recent explicit user statement.
-    #
-    # Do NOT invent anything.
 
     return (
         "Earlier, you told me: "
@@ -1114,6 +1062,7 @@ def main():
     memory_response = answer_memory_question(
         prompt
     )
+    st.warning("MEMORY CHECK: " + str(memory_response))
 
     # ==================================================
     # TEMPORARY MEMORY DEBUG
