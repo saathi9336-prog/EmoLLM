@@ -1004,22 +1004,14 @@ def main():
 
     for message in st.session_state.messages:
 
-        role = message.get("role")
+        role = message["role"]
 
-        content = message.get(
-            "content",
-            ""
-        )
+        content = message["content"]
 
-        avatar = message.get(
-            "avatar"
-        )
+        avatar = message.get("avatar")
 
-        # Streamlit uses:
-        #
-        # user
-        # assistant
-        #
+        # Streamlit uses "user" and "assistant"
+
         display_role = (
             "assistant"
             if role == "robot"
@@ -1038,8 +1030,7 @@ def main():
     # ==================================================
 
     prompt = st.chat_input(
-        "I'm here and ready to listen. "
-        "Tell me what's on your mind..."
+        "I'm here and ready to listen. Tell me what's on your mind..."
     )
 
     if not prompt:
@@ -1058,14 +1049,14 @@ def main():
         st.markdown(prompt)
 
     # ==================================================
-    # 1. SAFETY CHECK
+    # SAFETY CHECK
     # ==================================================
 
     if is_self_harm_message(prompt):
 
-        # ----------------------------------------------
+        # --------------------------------------------------
         # Save user message
-        # ----------------------------------------------
+        # --------------------------------------------------
 
         st.session_state.messages.append({
             "role": "user",
@@ -1073,9 +1064,9 @@ def main():
             "avatar": user_avator
         })
 
-        # ----------------------------------------------
-        # Display fixed safety response
-        # ----------------------------------------------
+        # --------------------------------------------------
+        # Display safety response
+        # --------------------------------------------------
 
         with st.chat_message(
             "assistant",
@@ -1086,9 +1077,9 @@ def main():
                 SAFETY_RESPONSE
             )
 
-        # ----------------------------------------------
+        # --------------------------------------------------
         # Save safety response
-        # ----------------------------------------------
+        # --------------------------------------------------
 
         st.session_state.messages.append({
             "role": "robot",
@@ -1096,49 +1087,50 @@ def main():
             "avatar": robot_avator
         })
 
-        # ----------------------------------------------
+        # --------------------------------------------------
         # IMPORTANT:
-        # Do NOT send self-harm message to model.
-        # ----------------------------------------------
+        # Do not send self-harm message to the model.
+        # --------------------------------------------------
 
         return
 
     # ==================================================
-    # 2. MEMORY QUESTION
+    # MEMORY QUESTION
     # ==================================================
 
-    memory_response = answer_memory_question(prompt)
-
-    # Debug information shown directly in Streamlit
-    if memory_response is not None:
-    
-        with st.expander("🔍 Memory Debug", expanded=True):
-    
-            st.write("User prompt:")
-            st.code(prompt)
-    
-            st.write("Memory response:")
-            st.code(memory_response)
+    memory_response = answer_memory_question(
+        prompt
+    )
 
     # ==================================================
-    # IF MEMORY QUESTION WAS DETECTED
+    # TEMPORARY MEMORY DEBUG
     # ==================================================
 
     if memory_response is not None:
 
-        # ----------------------------------------------
-        # Save current user message
-        # ----------------------------------------------
+        st.warning(
+            "MEMORY FUNCTION WAS CALLED"
+        )
 
-        st.session_state.messages.append({
-            "role": "user",
-            "content": prompt,
-            "avatar": user_avator
-        })
+        st.write(
+            "User question:"
+        )
 
-        # ----------------------------------------------
+        st.code(
+            prompt
+        )
+
+        st.write(
+            "Memory answer:"
+        )
+
+        st.code(
+            memory_response
+        )
+
+        # --------------------------------------------------
         # Display deterministic memory response
-        # ----------------------------------------------
+        # --------------------------------------------------
 
         with st.chat_message(
             "assistant",
@@ -1149,9 +1141,9 @@ def main():
                 memory_response
             )
 
-        # ----------------------------------------------
+        # --------------------------------------------------
         # Save memory response
-        # ----------------------------------------------
+        # --------------------------------------------------
 
         st.session_state.messages.append({
             "role": "robot",
@@ -1159,24 +1151,27 @@ def main():
             "avatar": robot_avator
         })
 
-        # ----------------------------------------------
+        # --------------------------------------------------
         # IMPORTANT:
-        # Do NOT send memory question to LLM.
-        # ----------------------------------------------
+        # Do NOT send memory question to the LLM.
+        # --------------------------------------------------
 
         return
 
     # ==================================================
-    # 3. NORMAL CONVERSATION
+    # NORMAL CONVERSATION
     # ==================================================
 
     # IMPORTANT:
     #
-    # Build prompt BEFORE adding the current user
-    # message to session history.
+    # Build the prompt BEFORE adding the current
+    # user message to history.
     #
-    # This prevents the current message from appearing
-    # twice in the generated prompt.
+    # combine_history() receives:
+    #
+    # OLD HISTORY + CURRENT USER MESSAGE
+    #
+    # exactly once.
 
     real_prompt = combine_history(
         prompt,
@@ -1206,9 +1201,9 @@ def main():
 
         cur_response = ""
 
-        # ----------------------------------------------
+        # --------------------------------------------------
         # Generate response
-        # ----------------------------------------------
+        # --------------------------------------------------
 
         for response in generate_interactive(
             model=model,
@@ -1224,9 +1219,9 @@ def main():
                 cur_response + "▌"
             )
 
-        # ----------------------------------------------
+        # --------------------------------------------------
         # Remove cursor
-        # ----------------------------------------------
+        # --------------------------------------------------
 
         message_placeholder.markdown(
             cur_response
